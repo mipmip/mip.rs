@@ -7,8 +7,10 @@ webserver.
 
 # TODO
 
-- [ ] implement markdown stuff
-- [ ] implement webserver
+- [ ] markdown stuff
+- [ ] webserver
 - [ ] free port finder
-- [ ] implement command line options
-- [ ]  templating
+- [ ] command line options
+- [ ] templating
+- [ ] inotify
+
