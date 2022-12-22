@@ -11,6 +11,7 @@
 - images
 - embedded template
 - License
+- remove frontmatter
 
 ## v.0.1.0 - 28 Sep
 

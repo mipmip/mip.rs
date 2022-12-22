@@ -1,5 +1,3 @@
-use warp::Filter;
-
 pub struct RestBro;
 
 impl RestBro {
@@ -9,22 +7,5 @@ impl RestBro {
         warp::serve(warp::fs::dir("."))
             .run(([127, 0, 0, 1], port))
             .await;
-
-        /*
-        let markdown = warp::get()
-            .and(warp::path(".temp.html"))
-            .and(warp::fs::file("./.temp.html"));
-
-        let seed =  warp::get()
-            .and(warp::path(".temp.seed"))
-            .and(warp::fs::file("./.temp.seed"));
-
-        let routes = markdown.or(seed);
-        warp::serve(routes)
-            .run(([127, 0, 0, 1], port))
-            .await;
-            */
-
     }
-
 }

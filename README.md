@@ -7,26 +7,18 @@ Crystal](https://github.com/mipmip/mip.cr), Rust seems a better choice.  Rust
 should support parallism better so it is able ro run webview next to a
 webserver.
 
-## Todo ugly version
+## Todo
 
-- [x] webserver
-- [x] free port finder
-- [x] markdown stuff
-- [x] inotify
-- [x] templating
-- [x] remove frontmatter
-- [x] images
-
-## later
-
-- [ ] command line options
-- [ ] improve error handling
-- [ ] use webview reload and not javascript reload
-- [ ] refactor
-- [ ] testing
-- [ ] git workflow
-- [ ] export pdf
-- [ ] export html
-- [ ] add readme: contrib
-- [ ] add readme: dev
-- [ ] add releases
+- [ ] app: command line options
+- [ ] app: improve error handling
+- [ ] app: use webview reload and not javascript reload
+- [ ] proj:refactor
+- [ ] proj:testing
+- [ ] proj: git workflow
+- [ ] proj: releases
+- [ ] app: export pdf
+- [ ] app: export html
+- [ ] readme: contrib
+- [ ] readme: dev
+- [ ] blog: mip.cr and mip.rs
+- [ ] prog: nix build
