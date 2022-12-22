@@ -8,6 +8,9 @@
 - cli arguments
 - free portfinder
 - inotify
+- images
+- embedded template
+- License
 
 ## v.0.1.0 - 28 Sep
 
