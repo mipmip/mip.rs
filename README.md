@@ -3,6 +3,8 @@ frontmatter: remove
 ---
 # Markdown in Preview - Rust edition
 
+![](markdown.png)
+
 After a first attempt of developing [MiP in
 Crystal](https://github.com/mipmip/mip.cr), Rust seems a better choice.  Rust
 should support parallism better so it is able ro run webview next to a
@@ -15,13 +17,14 @@ webserver.
 - [x] markdown stuff
 - [x] inotify
 - [x] templating
-- [ ] remove frontmatter
+- [x] remove frontmatter
+- [x] images
 
 ## Todo polished version
 
 - [ ] command line options
-- [ ] error handling
-- [ ] use reload and not javascript reload
+- [ ] improve error handling
+- [ ] use webview reload and not javascript reload
 - [ ] refactor
 
 ## later

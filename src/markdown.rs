@@ -1,6 +1,8 @@
 use std::fs;
 use rand::{distributions::Alphanumeric, Rng}; // 0.8
 use rust_embed::RustEmbed;
+use gray_matter::Matter;
+use gray_matter::engine::YAML;
 
 #[derive(RustEmbed)]
 #[folder = "asset/theme1"]
@@ -17,7 +19,11 @@ pub fn to_html(infile: &String, port: u16 ){
 
 fn to_file(markdown_input: &String, port: u16 ){
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
-    let parser = pulldown_cmark::Parser::new(&markdown_input);
+
+    let matter = Matter::<YAML>::new();
+    let result = matter.parse(&markdown_input);
+
+    let parser = pulldown_cmark::Parser::new(&result.content);
 
     let mut html_output = String::new();
     pulldown_cmark::html::push_html(&mut html_output, parser);

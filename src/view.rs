@@ -14,7 +14,7 @@ pub fn window(port: u16) -> wry::Result<()> {
 
   let event_loop = EventLoop::new();
   let window = WindowBuilder::new()
-    .with_title("Hello World")
+    .with_title("MiP")
     .build(&event_loop)?;
   let _webview = WebViewBuilder::new(window)?
     .with_url(&url)?
