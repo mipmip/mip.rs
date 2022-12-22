@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "inliner": "^1.13.1"
+  }
+}
