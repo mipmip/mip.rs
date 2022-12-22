@@ -1,6 +1,3 @@
----
-frontmatter: remove
----
 # Markdown in Preview - Rust edition
 
 ![](markdown.png)
@@ -20,18 +17,16 @@ webserver.
 - [x] remove frontmatter
 - [x] images
 
-## Todo polished version
+## later
 
 - [ ] command line options
 - [ ] improve error handling
 - [ ] use webview reload and not javascript reload
 - [ ] refactor
-
-## later
-
+- [ ] testing
+- [ ] git workflow
 - [ ] export pdf
 - [ ] export html
-
-
-
-
+- [ ] add readme: contrib
+- [ ] add readme: dev
+- [ ] add releases
