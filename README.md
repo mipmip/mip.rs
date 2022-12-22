@@ -1,3 +1,6 @@
+---
+frontmatter: remove
+---
 # Markdown in Preview - Rust edition
 
 After a first attempt of developing [MiP in
@@ -11,7 +14,8 @@ webserver.
 - [x] free port finder
 - [x] markdown stuff
 - [x] inotify
-- [ ] templating
+- [x] templating
+- [ ] remove frontmatter
 
 ## Todo polished version
 
@@ -19,6 +23,12 @@ webserver.
 - [ ] error handling
 - [ ] use reload and not javascript reload
 - [ ] refactor
+
+## later
+
+- [ ] export pdf
+- [ ] export html
+
 
 
 

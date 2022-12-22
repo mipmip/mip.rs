@@ -1,7 +1,12 @@
 { pkgs ? import <nixpkgs> {} }:
 pkgs.mkShell {
   nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo webkitgtk ];
-  buildInputs = with pkgs; [ rustfmt clippy];
+  buildInputs = with pkgs; [
+    rustfmt
+    clippy
+    pkgs.nodejs
+    pkgs.yarn
+  ];
 
   # Certain Rust tools won't work without this
   # This can also be fixed by using oxalica/rust-overlay and specifying the rust-src extension

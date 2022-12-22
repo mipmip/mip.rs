@@ -1,2 +1,5 @@
 /target
 .seed.html
+node_modules
+.temp.html
+.temp.seed

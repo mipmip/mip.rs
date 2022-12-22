@@ -10,7 +10,7 @@ pub fn window(port: u16) -> wry::Result<()> {
     webview::WebViewBuilder,
   };
 
-  let url = format!("http://localhost:{}/", port);
+  let url = format!("http://localhost:{}/.temp.html", port);
 
   let event_loop = EventLoop::new();
   let window = WindowBuilder::new()

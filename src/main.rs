@@ -20,7 +20,7 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
-fn watch<P: AsRef<Path>>(path: P, filepath: &String) -> notify::Result<()> {
+fn watch<P: AsRef<Path>>(path: P, filepath: &String, port: u16) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
@@ -33,7 +33,7 @@ fn watch<P: AsRef<Path>>(path: P, filepath: &String) -> notify::Result<()> {
                 if event.paths.len() > 0 {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(filepath) {
-                        markdown::to_html(&filepath);
+                        markdown::to_html(&filepath, port);
                     }
                 }
             },
@@ -58,14 +58,14 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        markdown::to_html(&path);
+        markdown::to_html(&path, available_port);
 
         let tr = tokio::runtime::Runtime::new().unwrap();
         tr.spawn(async move{
             let path_parsed = Path::new(&path);
             let parent = path_parsed.parent().unwrap();
 
-            if let Err(e) = watch(parent, &path) {
+            if let Err(e) = watch(parent, &path, available_port) {
                 println!("error: {:?}", e)
             }
         });

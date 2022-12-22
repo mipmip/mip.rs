@@ -9,3 +9,6 @@ tokio = { version = "1", features = ["full"] }
 warp = {version = "0.3"}
 pulldown-cmark = { version = "0.9", default-features = false }
 notify = {version = "5.0"}
+rust-embed = {version = "6.4.0"}
+rand = "0.8"
+gray_matter = "0.2"
