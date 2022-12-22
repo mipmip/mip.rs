@@ -1,5 +1,8 @@
 mod view;
 mod server;
+mod markdown;
+
+use std::env;
 use std::net::TcpListener;
 use crate::server::RestBro;
 
@@ -17,16 +20,26 @@ fn port_is_available(port: u16) -> bool {
 
 fn main(){
 
+    let args: Vec<_> = env::args().collect();
+
+    if args.len() < 2 {
+        println!("ERROR: Required arguments. \"file\"\n");
+        println!("Please see the `--help`.");
+        panic!("E1");
+    }
+
     if let Some(available_port) = get_available_port() {
+        markdown::to_html(&args[1]);
+
         let tr = tokio::runtime::Runtime::new().unwrap();
         tr.spawn(async move{
             RestBro::run_bro(available_port).await;
         });
-        //println!("Everything working good!");
 
         let _view_res = view::window(available_port);
     }
     else{
-        println!("Could not find free port");
+        panic!("E2");
     }
+
 }

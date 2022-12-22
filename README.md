@@ -5,12 +5,17 @@ Crystal](https://github.com/mipmip/mip.cr), Rust seems a better choice.  Rust
 should support parallism better so it is able ro run webview next to a
 webserver.
 
-# TODO
+## Todo ugly version
 
 - [x] webserver
 - [x] free port finder
-- [ ] markdown stuff
+- [x] markdown stuff
 - [ ] inotify
 - [ ] command line options
 - [ ] templating
+
+## Todo polished version
+
+- [ ] error handling
+
 
