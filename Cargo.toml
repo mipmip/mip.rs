@@ -8,3 +8,4 @@ wry = {version = "0.23"}
 tokio = { version = "1", features = ["full"] }
 warp = {version = "0.3"}
 pulldown-cmark = { version = "0.9", default-features = false }
+notify = {version = "5.0"}

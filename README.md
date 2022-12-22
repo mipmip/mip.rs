@@ -10,12 +10,15 @@ webserver.
 - [x] webserver
 - [x] free port finder
 - [x] markdown stuff
-- [ ] inotify
-- [ ] command line options
+- [x] inotify
 - [ ] templating
 
 ## Todo polished version
 
+- [ ] command line options
 - [ ] error handling
+- [ ] use reload and not javascript reload
+- [ ] refactor
+
 
 
