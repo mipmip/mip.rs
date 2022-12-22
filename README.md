@@ -7,10 +7,10 @@ webserver.
 
 # TODO
 
+- [x] webserver
+- [x] free port finder
 - [ ] markdown stuff
-- [ ] webserver
-- [ ] free port finder
+- [ ] inotify
 - [ ] command line options
 - [ ] templating
-- [ ] inotify
 
