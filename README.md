@@ -9,6 +9,7 @@ webserver.
 
 ## Todo
 
+- [ ] bug: fix other than current path images
 - [ ] app: command line options
 - [ ] app: improve error handling
 - [ ] app: use webview reload and not javascript reload
@@ -22,3 +23,4 @@ webserver.
 - [ ] readme: dev
 - [ ] blog: mip.cr and mip.rs
 - [ ] prog: nix build
+- [ ] app: icon
