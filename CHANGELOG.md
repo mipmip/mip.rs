@@ -2,6 +2,8 @@
 
 ## Next
 
+## v.0.2.0 - 23 Dec 2022
+
 - webserver
 - markdown parser
 - websview wri (more mature)
@@ -13,7 +15,7 @@
 - License
 - remove frontmatter
 
-## v.0.1.0 - 28 Sep
+## v.0.1.0 - 28 Sep 2022
 
 - inital project setup
 - webview working

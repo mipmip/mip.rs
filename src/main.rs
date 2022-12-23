@@ -20,20 +20,20 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
-fn watch<P: AsRef<Path>>(path: P, filepath: &String, port: u16) -> notify::Result<()> {
+fn watch(path_dir: &std::path::Path, path_file: &String, port: u16) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
-    watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
+    watcher.watch(path_dir.as_ref(), RecursiveMode::Recursive)?;
 
     for res in rx {
         match res {
             Ok(event) => {
                 if event.paths.len() > 0 {
                     let teststr = format!("{}", event.paths[0].display());
-                    if teststr.contains(filepath) {
-                        markdown::to_html(&filepath, port);
+                    if teststr.contains(path_file) {
+                        markdown::to_html(&path_dir, &path_file, port);
                     }
                 }
             },
@@ -44,12 +44,38 @@ fn watch<P: AsRef<Path>>(path: P, filepath: &String, port: u16) -> notify::Resul
     Ok(())
 }
 
+fn print_type_of<T>(_: &T) {
+    println!("{}", std::any::type_name::<T>())
+}
+
+fn string_to_static_str(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
 fn main() {
-    let path = std::env::args()
+    let path_file0 = std::env::args()
         .nth(1)
         .expect("Argument 1 needs to be a path");
 
     let args: Vec<_> = env::args().collect();
+
+
+    //let path_file_for_server = .to_owned();
+    //let s_slice: &str = &path_file;  // okay
+    let path_file = String::from(&path_file0);
+
+
+    let s_slice = string_to_static_str(path_file0);
+
+    let path_parsed1 = Path::new(s_slice);
+    let path_dir_for_server = path_parsed1.parent().unwrap();
+
+    let s_slice2 = string_to_static_str(path_dir_for_server.to_str().unwrap().to_string());
+
+    let path_parsed0 = Path::new(s_slice);
+    let path_dir_for_initial_md = path_parsed0.parent().unwrap();
+
+    //print_type_of(&path_dir_for_initial_md);
 
     if args.len() < 2 {
         println!("ERROR: Required arguments. \"file\"\n");
@@ -58,20 +84,23 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        markdown::to_html(&path, available_port);
+        markdown::to_html(&path_dir_for_initial_md, &path_file, available_port);
 
         let tr = tokio::runtime::Runtime::new().unwrap();
         tr.spawn(async move{
-            let path_parsed = Path::new(&path);
-            let parent = path_parsed.parent().unwrap();
+            let path_parsed = Path::new(&path_file);
+            let path_dir_for_watcher = path_parsed.parent().unwrap();
 
-            if let Err(e) = watch(parent, &path, available_port) {
+            if let Err(e) = watch(path_dir_for_watcher, &path_file, available_port) {
                 println!("error: {:?}", e)
             }
         });
 
         tr.spawn(async move{
-            RestBro::run_bro(available_port).await;
+            //let path_parsed = Path::new(&s_slice);
+            //let path_dir_for_server = path_parsed.parent().unwrap();
+
+            RestBro::run_bro(s_slice2, available_port).await;
         });
 
         let _view_res = view::window(available_port);
