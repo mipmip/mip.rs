@@ -7,6 +7,14 @@ Crystal](https://github.com/mipmip/mip.cr), Rust seems a better choice.  Rust
 should support parallism better so it is able ro run webview next to a
 webserver.
 
+
+## Table
+
+| key         | val                         |
+|-------------|-----------------------------|
+| description | this is a test a test table |
+| how         | this should look great      |
+
 ## Todo
 
 - [ ] app: command line options
@@ -16,6 +24,9 @@ webserver.
 - [ ] proj:testing
 - [ ] proj: git workflow
 - [ ] proj: releases
+- [ ] app: table of contents
+- [ ] app: reload keybinding
+- [ ] app: vim keybindings
 - [ ] app: export pdf
 - [ ] app: export html
 - [ ] readme: contrib

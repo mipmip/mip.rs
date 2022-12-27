@@ -3,6 +3,7 @@ use rand::{distributions::Alphanumeric, Rng}; // 0.8
 use rust_embed::RustEmbed;
 use gray_matter::Matter;
 use gray_matter::engine::YAML;
+use pulldown_cmark::{html, Options, Parser};
 
 #[derive(RustEmbed)]
 #[folder = "asset/theme1"]
@@ -23,10 +24,15 @@ fn to_file(markdown_input: &String, port: u16 ){
     let matter = Matter::<YAML>::new();
     let result = matter.parse(&markdown_input);
 
-    let parser = pulldown_cmark::Parser::new(&result.content);
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_TABLES);
+    //let parser = Parser::new_ext(markdown_input, options);
+    let parser = Parser::new_ext(&result.content, options);
 
     let mut html_output = String::new();
-    pulldown_cmark::html::push_html(&mut html_output, parser);
+    html::push_html(&mut html_output, parser);
 
 
     let seed :String = rand::thread_rng()
