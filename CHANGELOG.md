@@ -2,15 +2,12 @@
 
 ## Next
 
-## v.0.2.1 - 28 Dec 2022
-- bug: fix other than current path images
+## v.0.2.0 - 28 Dec 2022
 - readme: contrib
 - readme: dev
 - app: icon
 - remove unwanted debug output
-
-## v.0.2.0 - 23 Dec 2022
-
+- bug: fix other than current path images
 - webserver
 - markdown parser
 - websview wri (more mature)
