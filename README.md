@@ -8,7 +8,8 @@ preview my markdown files which I write in vim.
 
 See the simple workflow in this video...
 
-[mip-video.webm](mip-video.webm)
+[mip-video.webm](https://user-images.githubusercontent.com/658612/209807766-3df2fc42-e53a-4183-aff4-9ed0acc6e449.webm)
+
 
 After a first attempt of developing [Mip in
 Crystal](https://github.com/mipmip/mip.cr), Rust seemed a better choice as it
