@@ -9,7 +9,6 @@ webserver.
 
 
 
-
 ## Todo
 
 - [ ] bug: fix other than current path images
@@ -22,6 +21,9 @@ webserver.
 - [ ] proj:testing
 - [ ] proj: git workflow
 - [ ] proj: releases
+- [ ] app: table of contents
+- [ ] app: reload keybinding
+- [ ] app: vim keybindings
 - [ ] app: export pdf
 - [ ] app: export html
 - [ ] readme: contrib
