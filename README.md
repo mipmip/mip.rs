@@ -7,9 +7,14 @@ Crystal](https://github.com/mipmip/mip.cr), Rust seems a better choice.  Rust
 should support parallism better so it is able ro run webview next to a
 webserver.
 
+
+
+
 ## Todo
 
 - [ ] bug: fix other than current path images
+  - [ ] cleanup var names
+
 - [ ] app: command line options
 - [ ] app: improve error handling
 - [ ] app: use webview reload and not javascript reload
