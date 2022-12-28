@@ -14,7 +14,7 @@ pub fn to_html(path_dir: &std::path::Path, infile: &String, port: u16 ){
     let markdown_input = fs::read_to_string(infile);
     match markdown_input {
         Ok(markdown_input) => to_file(path_dir, &markdown_input, port),
-        Err(_) => println!("REMOVE this..no file")
+        Err(_) => {}
     };
 }
 
@@ -28,7 +28,6 @@ fn to_file(path_dir: &std::path::Path, markdown_input: &String, port: u16 ){
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_TABLES);
-    //let parser = Parser::new_ext(markdown_input, options);
     let parser = Parser::new_ext(&result.content, options);
 
     let mut html_output = String::new();

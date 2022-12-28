@@ -40,13 +40,14 @@ fn watch(path_dir: &std::path::Path, path_file: &String, port: u16) -> notify::R
             Err(e) => println!("watch error: {:?}", e),
         }
     }
-
     Ok(())
 }
 
+/*
 fn print_type_of<T>(_: &T) {
     println!("{}", std::any::type_name::<T>())
 }
+*/
 
 fn string_to_static_str(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
@@ -59,11 +60,7 @@ fn main() {
 
     let args: Vec<_> = env::args().collect();
 
-
-    //let path_file_for_server = .to_owned();
-    //let s_slice: &str = &path_file;  // okay
     let path_file = String::from(&path_file0);
-
 
     let s_slice = string_to_static_str(path_file0);
 
@@ -74,8 +71,6 @@ fn main() {
 
     let path_parsed0 = Path::new(s_slice);
     let path_dir_for_initial_md = path_parsed0.parent().unwrap();
-
-    //print_type_of(&path_dir_for_initial_md);
 
     if args.len() < 2 {
         println!("ERROR: Required arguments. \"file\"\n");
@@ -97,9 +92,6 @@ fn main() {
         });
 
         tr.spawn(async move{
-            //let path_parsed = Path::new(&s_slice);
-            //let path_dir_for_server = path_parsed.parent().unwrap();
-
             RestBro::run_bro(s_slice2, available_port).await;
         });
 
