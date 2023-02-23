@@ -75,7 +75,7 @@ fn main() {
     if args.len() < 2 {
         println!("ERROR: Required arguments. \"file\"\n");
         println!("Please see the `--help`.");
-        panic!("E1");
+        process::exit(1);
     }
 
     if let Some(available_port) = get_available_port() {
