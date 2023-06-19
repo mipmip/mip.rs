@@ -46,6 +46,7 @@ mip [markdown file]
   - [ ] set version and date in changelog
 - [ ] app: table of contents
 - [ ] app: reload keybinding
+- [ ] app: rm temp files
 - [ ] app: vim keybindings
 - [ ] app: export pdf
 - [ ] app: export html
@@ -64,7 +65,6 @@ mip [markdown file]
 ### Setup HTML Template dev Environment
 
 ```bash
-shards install
 yarn
 ```
 
@@ -78,7 +78,6 @@ cargo run
 
 ```bash
 cargo build --release
-./mip
 ```
 
 ### Compile themes

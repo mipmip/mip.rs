@@ -10,15 +10,14 @@ compthemes:
 
 build:
 	yarn
-	shards
 	make compthemes
-	crystal build --release src/mip.cr
+	cargo build --release
 
 test:
-	crystal spec
+	@echo WIP
+
 clean:
-	rm -f ./mip
+	rm -fv ./target
 
 release:
-	@echo run crystal2nix and commit shards.nix
-	@echo "you should execute: crelease x.x.x"
+	@echo WIP
