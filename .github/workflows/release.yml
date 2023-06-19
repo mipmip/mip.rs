@@ -1,5 +1,7 @@
 # .github/workflows/release.yml
 
+env:
+  - SRC_DIR: "src"
 on:
   workflow_dispatch:
   release:

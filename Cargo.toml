@@ -1,7 +1,7 @@
 [package]
 name = "mip"
 version = "0.2.1"
-edition = "2023"
+edition = "2021"
 
 [dependencies]
 wry = {version = "0.23"}
