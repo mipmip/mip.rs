@@ -24,7 +24,10 @@ See the simple workflow in this video...
 
 ## Installation
 
-- no releases yet. You should compile it yourself. See instructions below..
+The latest Mip binaries for Mac and Windows can be downloaded [at the release
+pages](https://github.com/mipmip/mip.rs/releases/latest). Currently we have
+[problems building Linux binaries](https://github.com/mipmip/mip.rs/issues/4)
+with our workflow. Help with this would be appreciated.
 
 ## Usage
 
