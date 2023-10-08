@@ -1228,7 +1228,7 @@ dependencies = [
 
 [[package]]
 name = "mip"
-version = "0.1.1"
+version = "0.2.2"
 dependencies = [
  "gray_matter",
  "notify",
