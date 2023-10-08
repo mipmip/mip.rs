@@ -21,6 +21,7 @@ See the simple workflow in this video...
 - preview images
 - hides frontmatter
 - autoreload if file changes
+- uft8 & 🤔 support
 
 ## Installation
 
