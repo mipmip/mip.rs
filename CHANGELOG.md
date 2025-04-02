@@ -1,6 +1,8 @@
 # Changelog mip.rs
 
 ## Next
+- add flake.nix
+- get it working again after cargo update - 2 april 2025
 
 ## v.0.2.0 - 28 Dec 2022
 - readme: contrib

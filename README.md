@@ -15,6 +15,7 @@ See the simple workflow in this video...
 
 [mip-video.webm](https://user-images.githubusercontent.com/658612/209807766-3df2fc42-e53a-4183-aff4-9ed0acc6e449.webm)
 
+
 ## Features
 
 - built-in webserver
@@ -58,7 +59,20 @@ mip [markdown file]
 - [ ] prog: nix build
 - [ ] app: linux desktop info
 
+## Troubleshooting
+
+- Under wayland you might need to set `WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+## Development with Nix
+
+```bash
+nix develop
+make
+```
+```
+
 ## Development
+
 
 ### Prerequisites
 
