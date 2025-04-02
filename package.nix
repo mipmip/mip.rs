@@ -1,9 +1,11 @@
 { pkgs ? import <nixpkgs> { } }:
+
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "mip";
   version = "0.3.0";
   cargoLock.lockFile = ./Cargo.lock;
-  src = pkgs.lib.cleanSource ./.;
+  #src = pkgs.lib.cleanSource ./.;
+  src =  ./.;
 
   nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo webkitgtk_4_1];
   buildInputs = with pkgs; [
