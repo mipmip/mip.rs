@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use tao::{
   event::{Event, WindowEvent},
   event_loop::{ControlFlow, EventLoop},
@@ -5,7 +7,7 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
-pub fn window(port: u16) -> wry::Result<()> {
+pub fn window(port: u16, temp_dir: PathBuf) -> wry::Result<()> {
   let event_loop = EventLoop::new();
   let window = WindowBuilder::new()
     .with_title("MiP")
@@ -59,6 +61,7 @@ pub fn window(port: u16) -> wry::Result<()> {
       ..
     } = event
     {
+      let _ = std::fs::remove_dir_all(&temp_dir);
       *control_flow = ControlFlow::Exit;
     }
   });

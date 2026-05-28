@@ -3,7 +3,8 @@ mod server;
 mod markdown;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, Config};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::env;
 use std::net::TcpListener;
@@ -21,7 +22,7 @@ fn port_is_available(port: u16) -> bool {
     }
 }
 
-fn watch(path_dir: &std::path::Path, path_file: &String, port: u16) -> notify::Result<()> {
+fn watch(path_dir: &std::path::Path, path_file: &String, temp_dir: &std::path::Path, port: u16) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
@@ -34,7 +35,7 @@ fn watch(path_dir: &std::path::Path, path_file: &String, port: u16) -> notify::R
                 if event.paths.len() > 0 {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(path_file) {
-                        markdown::to_html(&path_dir, &path_file, port);
+                        markdown::to_html(&path_file, temp_dir, port);
                     }
                 }
             },
@@ -70,33 +71,35 @@ fn main() {
 
     let s_slice2 = string_to_static_str(path_dir_for_server.to_str().unwrap().to_string());
 
-    let path_parsed0 = Path::new(s_slice);
-    let path_dir_for_initial_md = path_parsed0.parent().unwrap();
-
     if args.len() < 2 {
         println!("ERROR: Required arguments. \"file\"\n");
         println!("Please see the `--help`.");
         process::exit(1);
     }
 
+    let temp_dir: PathBuf = env::temp_dir().join(format!("mip-{}", process::id()));
+    fs::create_dir_all(&temp_dir).expect("Unable to create temp directory");
+    let temp_dir_str = string_to_static_str(temp_dir.to_str().unwrap().to_string());
+    let temp_dir_for_watcher = temp_dir.clone();
+
     if let Some(available_port) = get_available_port() {
-        markdown::to_html(&path_dir_for_initial_md, &path_file, available_port);
+        markdown::to_html(&path_file, &temp_dir, available_port);
 
         let tr = tokio::runtime::Runtime::new().unwrap();
         tr.spawn(async move{
             let path_parsed = Path::new(&path_file);
             let path_dir_for_watcher = path_parsed.parent().unwrap();
 
-            if let Err(e) = watch(path_dir_for_watcher, &path_file, available_port) {
+            if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port) {
                 println!("error: {:?}", e)
             }
         });
 
         tr.spawn(async move{
-            RestBro::run_bro(s_slice2, available_port).await;
+            RestBro::run_bro(s_slice2, temp_dir_str, available_port).await;
         });
 
-        let _view_res = view::window(available_port);
+        let _view_res = view::window(available_port, temp_dir);
     }
     else{
         panic!("E2");
