@@ -34,10 +34,6 @@
           ];
 
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
-          shellHook = ''
-            export WEBKIT_DISABLE_DMABUF_RENDERER=1
-            /usr/bin/env zsh
-          '';
         };
       });
     };
