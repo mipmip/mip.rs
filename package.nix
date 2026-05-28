@@ -2,7 +2,7 @@
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "mip";
-  version = "0.3.0";
+  version = "0.2.3";
   cargoLock.lockFile = ./Cargo.lock;
   #src = pkgs.lib.cleanSource ./.;
   src =  ./.;

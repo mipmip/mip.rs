@@ -24,12 +24,22 @@ See the simple workflow in this video...
 - autoreload if file changes
 - uft8 & 🤔 support
 
+## Platform Notice
+
+**v0.2.3 is the last version with macOS and Windows support.** Future versions
+will be Linux-only, using GTK4 and WebKitGTK 6.0. If you need macOS or Windows
+support, pin to [v0.2.3](https://github.com/mipmip/mip.rs/releases/tag/v0.2.3).
+
 ## Installation
 
-The latest Mip binaries for Mac and Windows can be downloaded [at the release
-pages](https://github.com/mipmip/mip.rs/releases/latest). Currently we have
-[problems building Linux binaries](https://github.com/mipmip/mip.rs/issues/4)
-with our workflow. Help with this would be appreciated.
+On NixOS / with Nix flakes:
+
+```bash
+nix run github:mipmip/mip.rs -- ./README.md
+```
+
+Binaries for macOS and Windows (v0.2.3 and earlier) can be downloaded from the
+[release pages](https://github.com/mipmip/mip.rs/releases/latest).
 
 ## Usage
 
@@ -51,17 +61,13 @@ mip [markdown file]
   - [ ] set version and date in changelog
 - [ ] app: table of contents
 - [ ] app: reload keybinding
-- [ ] app: rm temp files
+- [x] app: rm temp files
 - [ ] app: vim keybindings
 - [ ] app: export pdf
 - [ ] app: export html
 - [ ] blog: mip.cr and mip.rs
-- [ ] prog: nix build
+- [x] prog: nix build
 - [ ] app: linux desktop info
-
-## Troubleshooting
-
-- Under wayland you might need to set `WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 ## Development with Nix
 
@@ -116,3 +122,4 @@ make compthemes
 ## Contributors
 
 - [Pim Snel](https://github.com/mipmip) - creator and maintainer
+- [Eduardo Cuducos](https://github.com/cuducos)
