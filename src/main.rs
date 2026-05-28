@@ -16,13 +16,10 @@ fn get_available_port() -> Option<u16> {
 }
 
 fn port_is_available(port: u16) -> bool {
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-fn watch(path_dir: &std::path::Path, path_file: &String, temp_dir: &std::path::Path, port: u16) -> notify::Result<()> {
+fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path, port: u16) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
@@ -32,10 +29,10 @@ fn watch(path_dir: &std::path::Path, path_file: &String, temp_dir: &std::path::P
     for res in rx {
         match res {
             Ok(event) => {
-                if event.paths.len() > 0 {
+                if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(path_file) {
-                        markdown::to_html(&path_file, temp_dir, port);
+                        markdown::to_html(path_file, temp_dir, port);
                     }
                 }
             },
@@ -44,12 +41,6 @@ fn watch(path_dir: &std::path::Path, path_file: &String, temp_dir: &std::path::P
     }
     Ok(())
 }
-
-/*
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
-}
-*/
 
 fn string_to_static_str(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
@@ -85,24 +76,31 @@ fn main() {
     if let Some(available_port) = get_available_port() {
         markdown::to_html(&path_file, &temp_dir, available_port);
 
-        let tr = tokio::runtime::Runtime::new().unwrap();
-        tr.spawn(async move{
-            let path_parsed = Path::new(&path_file);
-            let path_dir_for_watcher = path_parsed.parent().unwrap();
+        // Run tokio runtime in a separate thread so it doesn't compete
+        // with the GTK4 main loop for the main thread.
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async move {
+                let watcher_handle = tokio::spawn(async move {
+                    let path_parsed = Path::new(&path_file);
+                    let path_dir_for_watcher = path_parsed.parent().unwrap();
 
-            if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port) {
-                println!("error: {:?}", e)
-            }
+                    if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port) {
+                        println!("error: {:?}", e)
+                    }
+                });
+
+                let server_handle = tokio::spawn(async move {
+                    RestBro::run_bro(s_slice2, temp_dir_str, available_port).await;
+                });
+
+                let _ = tokio::join!(watcher_handle, server_handle);
+            });
         });
 
-        tr.spawn(async move{
-            RestBro::run_bro(s_slice2, temp_dir_str, available_port).await;
-        });
-
-        let _view_res = view::window(available_port, temp_dir);
+        view::window(available_port, temp_dir);
     }
     else{
         panic!("E2");
     }
-
 }

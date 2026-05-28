@@ -1,28 +1,42 @@
 use std::fs;
-use rand::{distributions::Alphanumeric, Rng}; // 0.8
-use rust_embed::RustEmbed;
+use rand::Rng;
+use rand::distr::Alphanumeric;
+use rust_embed::Embed;
 use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use pulldown_cmark::{html, Options, Parser};
 
-#[derive(RustEmbed)]
+#[derive(Embed)]
 #[folder = "asset/theme1"]
 struct Asset;
 
-pub fn to_html(infile: &String, output_dir: &std::path::Path, port: u16 ){
+/// Convert raw markdown text to HTML body (without template wrapper).
+pub fn md_to_html_body(markdown_input: &str) -> String {
+    let matter = Matter::<YAML>::new();
+    let result = matter.parse(markdown_input);
 
-    let markdown_input = fs::read_to_string(infile);
-    match markdown_input {
-        Ok(markdown_input) => to_file(&markdown_input, output_dir, port),
-        Err(_) => {}
-    };
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_TABLES);
+    let parser = Parser::new_ext(&result.content, options);
+
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
 }
 
-fn to_file(markdown_input: &String, output_dir: &std::path::Path, port: u16 ){
+pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16 ){
+
+    let markdown_input = fs::read_to_string(infile);
+    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port) };
+}
+
+fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16 ){
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
 
     let matter = Matter::<YAML>::new();
-    let result = matter.parse(&markdown_input);
+    let result = matter.parse(markdown_input);
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -33,8 +47,7 @@ fn to_file(markdown_input: &String, output_dir: &std::path::Path, port: u16 ){
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
 
-
-    let seed :String = rand::thread_rng()
+    let seed: String = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(7)
         .map(char::from)
@@ -47,8 +60,13 @@ fn to_file(markdown_input: &String, output_dir: &std::path::Path, port: u16 ){
             let html_complete1 = index_html_str.replace("#{BODY}", &html_output);
             let html_complete2 = html_complete1.replace("#{INITIALSEED}", &seed);
             let html_complete3 = html_complete2.replace("#{SEEDURL}", &seed_url);
-            fs::write(output_dir.join(".temp.seed"), seed).expect("Unable to write file");
-            fs::write(output_dir.join(".temp.html"), html_complete3).expect("Unable to write file");
+            if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
+                eprintln!("warning: could not write seed file: {}", e);
+                return;
+            }
+            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete3) {
+                eprintln!("warning: could not write html file: {}", e);
+            }
         },
         Err(_) => println!("URF this..no file")
     };

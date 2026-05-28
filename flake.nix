@@ -5,7 +5,7 @@
 
   outputs = { self, nixpkgs }:
     let
-      allSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      allSystems = [ "x86_64-linux" "aarch64-linux" ];
 
       forAllSystems = f:
         nixpkgs.lib.genAttrs allSystems (system:
@@ -24,8 +24,7 @@
       devShells = forAllSystems ({ pkgs }:
         {
           default = with pkgs; mkShell {
-            #          nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo webkitgtk webkitgtk_4_1];
-          nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo webkitgtk_4_1];
+          nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo gtk4 webkitgtk_6_0 ];
           buildInputs = with pkgs; [
             rustfmt
             clippy

@@ -2,20 +2,18 @@
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "mip";
-  version = "0.2.3";
+  version = "0.3.0";
   cargoLock.lockFile = ./Cargo.lock;
-  #src = pkgs.lib.cleanSource ./.;
-  src =  ./.;
+  src = ./.;
 
-  nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo webkitgtk_4_1];
+  nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo gtk4 webkitgtk_6_0 ];
   buildInputs = with pkgs; [
     rustfmt
     clippy
     pkgs.nodejs
     pkgs.yarn
     glib
-    webkitgtk_4_1
+    gtk4
+    webkitgtk_6_0
   ];
-
-  #RUST_SRC_PATH = rustPlatform.rustLibSrc;
 }

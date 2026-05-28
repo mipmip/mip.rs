@@ -1,5 +1,14 @@
 # Changelog mip.rs
 
+## v0.3.0 - 28 May 2026
+
+Linux-only from this version onwards.
+
+- **BREAKING**: drop macOS and Windows support
+- migrate from tao/wry (GTK3 + webkit2gtk-4.1) to native gtk4 + webkit6 (WebKitGTK 6.0)
+- update pulldown-cmark 0.9 → 0.12, rust-embed 6 → 8, rand 0.8 → 0.9, notify 5 → 7
+- update Rust edition to 2024
+
 ## v0.2.3 - 28 May 2026
 
 This is the last version with macOS and Windows support. Future versions will
