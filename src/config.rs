@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub struct Config {
     pub theme: Option<String>,
     pub frontmatter: Option<bool>,
+    pub toc: Option<String>,
 }
 
 impl Config {
@@ -32,6 +33,17 @@ impl Config {
                         return Config {
                             theme: None,
                             frontmatter: config.frontmatter,
+                            toc: config.toc,
+                        };
+                    }
+                }
+                if let Some(ref toc) = config.toc {
+                    if !["side", "zathura", "off"].contains(&toc.as_str()) {
+                        eprintln!("warning: invalid toc mode '{}' in config, using default", toc);
+                        return Config {
+                            theme: config.theme,
+                            frontmatter: config.frontmatter,
+                            toc: None,
                         };
                     }
                 }
@@ -50,6 +62,10 @@ impl Config {
 
     pub fn frontmatter(&self) -> bool {
         self.frontmatter.unwrap_or(false)
+    }
+
+    pub fn toc(&self) -> &str {
+        self.toc.as_deref().unwrap_or("off")
     }
 }
 

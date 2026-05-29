@@ -14,6 +14,12 @@
 - refactor: extract pure `build_html()` from `to_file()`, extract `routes()` from `run_bro()`, add `Config::load_from(path)`
 - add `src/lib.rs` crate root for testability
 - add coverage tooling: `scripts/update-coverage.sh` with `cargo-tarpaulin`, plain-text percentage in README
+- add Table of Contents with two display modes: `--toc side` (persistent side panel) and `--toc zathura` (Tab-toggle, Zathura-style)
+- TOC uses native GTK TreeView with collapsible heading hierarchy
+- vim-style keyboard navigation in TOC (j/k, Enter, Esc)
+- headings now get anchor `id` attributes for in-document navigation
+- add `toc` config option in `config.toml`
+- only rebuild TOC and re-inject HTML when content actually changes (reduces flicker)
 
 ## v0.3.0 - 28 May 2026
 

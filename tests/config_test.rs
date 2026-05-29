@@ -63,3 +63,38 @@ fn test_load_from_system_theme() {
     let cfg = Config::load_from(file.path());
     assert_eq!(cfg.theme(), "system");
 }
+
+#[test]
+fn test_load_from_toc_side() {
+    let file = write_temp_config("toc = \"side\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.toc(), "side");
+}
+
+#[test]
+fn test_load_from_toc_zathura() {
+    let file = write_temp_config("toc = \"zathura\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.toc(), "zathura");
+}
+
+#[test]
+fn test_load_from_toc_off() {
+    let file = write_temp_config("toc = \"off\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.toc(), "off");
+}
+
+#[test]
+fn test_load_from_toc_invalid_falls_back() {
+    let file = write_temp_config("toc = \"floating\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.toc(), "off");
+}
+
+#[test]
+fn test_load_from_toc_missing_defaults_to_off() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.toc(), "off");
+}

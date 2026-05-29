@@ -30,6 +30,10 @@ struct Cli {
     /// color theme: system, light, or dark
     #[argh(option)]
     theme: Option<String>,
+
+    /// table of contents mode: side, zathura, or off
+    #[argh(option)]
+    toc: Option<String>,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -115,6 +119,16 @@ fn main() {
     // CLI --frontmatter overrides config (flag presence means true)
     let show_frontmatter = if cli.frontmatter { true } else { cfg.frontmatter() };
 
+    let toc_mode = if let Some(ref t) = cli.toc {
+        if !["side", "zathura", "off"].contains(&t.as_str()) {
+            eprintln!("error: invalid toc mode '{}'. Must be side, zathura, or off.", t);
+            process::exit(1);
+        }
+        t.as_str()
+    } else {
+        cfg.toc()
+    };
+
     let path_file = String::from(&path_file0);
 
     let s_slice = string_to_static_str(path_file0);
@@ -129,6 +143,7 @@ fn main() {
     let temp_dir_str = string_to_static_str(temp_dir.to_str().unwrap().to_string());
     let temp_dir_for_watcher = temp_dir.clone();
     let theme_class_string = theme_class.to_string();
+    let path_file_for_view = path_file.clone();
 
     if let Some(available_port) = get_available_port() {
         mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
@@ -155,7 +170,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, toc_mode, &path_file_for_view);
     }
     else{
         panic!("E2");

@@ -5,7 +5,7 @@ use rust_embed::Embed;
 use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use gray_matter::value::pod::Pod;
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{html, Event, Options, Parser, Tag, TagEnd, HeadingLevel};
 
 #[derive(Embed)]
 #[folder = "asset/theme1"]
@@ -48,6 +48,153 @@ fn frontmatter_to_html(data: &Pod) -> String {
     } else {
         String::new()
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TocEntry {
+    pub level: u8,
+    pub title: String,
+    pub anchor_id: String,
+}
+
+pub fn slugify(text: &str) -> String {
+    let slug: String = text
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect();
+    // Collapse consecutive dashes and trim
+    let mut result = String::new();
+    let mut prev_dash = false;
+    for c in slug.chars() {
+        if c == '-' {
+            if !prev_dash && !result.is_empty() {
+                result.push('-');
+            }
+            prev_dash = true;
+        } else {
+            prev_dash = false;
+            result.push(c);
+        }
+    }
+    if result.ends_with('-') {
+        result.pop();
+    }
+    result
+}
+
+fn slugify_unique(text: &str, existing: &[String]) -> String {
+    let base = slugify(text);
+    if base.is_empty() {
+        let id = format!("heading-{}", existing.len());
+        return id;
+    }
+    if !existing.contains(&base) {
+        return base;
+    }
+    let mut n = 1;
+    loop {
+        let candidate = format!("{}-{}", base, n);
+        if !existing.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+fn heading_level_to_u8(level: HeadingLevel) -> u8 {
+    match level {
+        HeadingLevel::H1 => 1,
+        HeadingLevel::H2 => 2,
+        HeadingLevel::H3 => 3,
+        HeadingLevel::H4 => 4,
+        HeadingLevel::H5 => 5,
+        HeadingLevel::H6 => 6,
+    }
+}
+
+fn extract_headings_and_inject_ids<'a>(
+    events: impl Iterator<Item = Event<'a>>,
+) -> (Vec<Event<'a>>, Vec<TocEntry>) {
+    let mut toc = Vec::new();
+    let mut used_ids: Vec<String> = Vec::new();
+    let mut output_events: Vec<Event<'a>> = Vec::new();
+    let mut in_heading = false;
+    let mut heading_level: u8 = 0;
+    let mut heading_text = String::new();
+
+    for event in events {
+        match &event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                in_heading = true;
+                heading_level = heading_level_to_u8(*level);
+                heading_text.clear();
+                // Don't push the start event yet — we'll replace it
+                output_events.push(event);
+                continue;
+            }
+            Event::End(TagEnd::Heading(level)) => {
+                in_heading = false;
+                let anchor_id = slugify_unique(&heading_text, &used_ids);
+                used_ids.push(anchor_id.clone());
+                toc.push(TocEntry {
+                    level: heading_level,
+                    title: heading_text.clone(),
+                    anchor_id: anchor_id.clone(),
+                });
+                // Inject the id attribute by replacing the Start event
+                // Find the last Start(Heading) in output_events and replace it
+                let lvl = *level;
+                for ev in output_events.iter_mut().rev() {
+                    if matches!(ev, Event::Start(Tag::Heading { .. })) {
+                        *ev = Event::Start(Tag::Heading {
+                            level: lvl,
+                            id: Some(anchor_id.clone().into()),
+                            classes: vec![],
+                            attrs: vec![],
+                        });
+                        break;
+                    }
+                }
+                output_events.push(event);
+                continue;
+            }
+            Event::Text(text) if in_heading => {
+                heading_text.push_str(text);
+            }
+            Event::Code(code) if in_heading => {
+                heading_text.push_str(code);
+            }
+            _ => {}
+        }
+        output_events.push(event);
+    }
+
+    (output_events, toc)
+}
+
+/// Convert raw markdown text to HTML body with TOC entries.
+pub fn md_to_html_body_with_toc(markdown_input: &str, show_frontmatter: bool) -> (String, Vec<TocEntry>) {
+    let matter = Matter::<YAML>::new();
+    let result = matter.parse(markdown_input);
+
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    options.insert(Options::ENABLE_TABLES);
+    let parser = Parser::new_ext(&result.content, options);
+
+    let mut html_output = String::new();
+
+    if show_frontmatter {
+        if let Some(ref data) = result.data {
+            html_output.push_str(&frontmatter_to_html(data));
+        }
+    }
+
+    let (events, toc) = extract_headings_and_inject_ids(parser);
+    html::push_html(&mut html_output, events.into_iter());
+    (rewrite_media_embeds(&html_output), toc)
 }
 
 const VIDEO_EXTENSIONS: &[&str] = &[".webm", ".mp4", ".mov", ".ogv"];
@@ -126,25 +273,8 @@ fn rewrite_media_embeds(html: &str) -> String {
 
 /// Convert raw markdown text to HTML body (without template wrapper).
 pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
-    let matter = Matter::<YAML>::new();
-    let result = matter.parse(markdown_input);
-
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TASKLISTS);
-    options.insert(Options::ENABLE_TABLES);
-    let parser = Parser::new_ext(&result.content, options);
-
-    let mut html_output = String::new();
-
-    if show_frontmatter {
-        if let Some(ref data) = result.data {
-            html_output.push_str(&frontmatter_to_html(data));
-        }
-    }
-
-    html::push_html(&mut html_output, parser);
-    rewrite_media_embeds(&html_output)
+    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter);
+    html
 }
 
 /// Build the complete HTML document from markdown content.
@@ -247,5 +377,107 @@ mod tests {
         map.insert("key".to_string(), Pod::String("val".to_string()));
         let pod = Pod::Hash(map);
         assert_eq!(pod_to_html_value(&pod), "key: val");
+    }
+
+    #[test]
+    fn test_slugify_basic() {
+        assert_eq!(slugify("Hello World"), "hello-world");
+    }
+
+    #[test]
+    fn test_slugify_special_chars() {
+        assert_eq!(slugify("Setup & Dependencies"), "setup-dependencies");
+    }
+
+    #[test]
+    fn test_slugify_unicode() {
+        assert_eq!(slugify("Über cool"), "über-cool");
+    }
+
+    #[test]
+    fn test_slugify_consecutive_dashes() {
+        assert_eq!(slugify("a - - b"), "a-b");
+    }
+
+    #[test]
+    fn test_slugify_leading_trailing() {
+        assert_eq!(slugify("  hello  "), "hello");
+    }
+
+    #[test]
+    fn test_slugify_empty() {
+        assert_eq!(slugify(""), "");
+    }
+
+    #[test]
+    fn test_slugify_numbers() {
+        assert_eq!(slugify("Step 1: Do it"), "step-1-do-it");
+    }
+
+    #[test]
+    fn test_slugify_unique_duplicates() {
+        let existing = vec!["intro".to_string()];
+        assert_eq!(slugify_unique("Intro", &existing), "intro-1");
+
+        let existing2 = vec!["intro".to_string(), "intro-1".to_string()];
+        assert_eq!(slugify_unique("Intro", &existing2), "intro-2");
+    }
+
+    #[test]
+    fn test_slugify_unique_empty_text() {
+        let existing = vec![];
+        assert_eq!(slugify_unique("", &existing), "heading-0");
+    }
+
+    #[test]
+    fn test_md_to_html_body_with_toc_basic() {
+        let md = "# Title\n\n## Section\n\nText\n\n### Sub";
+        let (html, toc) = md_to_html_body_with_toc(md, false);
+
+        assert_eq!(toc.len(), 3);
+        assert_eq!(toc[0], TocEntry { level: 1, title: "Title".into(), anchor_id: "title".into() });
+        assert_eq!(toc[1], TocEntry { level: 2, title: "Section".into(), anchor_id: "section".into() });
+        assert_eq!(toc[2], TocEntry { level: 3, title: "Sub".into(), anchor_id: "sub".into() });
+
+        assert!(html.contains("<h1 id=\"title\">Title</h1>"));
+        assert!(html.contains("<h2 id=\"section\">Section</h2>"));
+        assert!(html.contains("<h3 id=\"sub\">Sub</h3>"));
+    }
+
+    #[test]
+    fn test_md_to_html_body_with_toc_skipped_levels() {
+        let md = "# Top\n\n### Skipped h2\n\n## Back to h2";
+        let (_html, toc) = md_to_html_body_with_toc(md, false);
+
+        assert_eq!(toc.len(), 3);
+        assert_eq!(toc[0].level, 1);
+        assert_eq!(toc[1].level, 3);
+        assert_eq!(toc[2].level, 2);
+    }
+
+    #[test]
+    fn test_md_to_html_body_with_toc_no_headings() {
+        let md = "Just a paragraph.\n\nAnother one.";
+        let (_html, toc) = md_to_html_body_with_toc(md, false);
+        assert!(toc.is_empty());
+    }
+
+    #[test]
+    fn test_md_to_html_body_with_toc_duplicate_headings() {
+        let md = "# Intro\n\n## Intro\n\n### Intro";
+        let (_html, toc) = md_to_html_body_with_toc(md, false);
+
+        assert_eq!(toc[0].anchor_id, "intro");
+        assert_eq!(toc[1].anchor_id, "intro-1");
+        assert_eq!(toc[2].anchor_id, "intro-2");
+    }
+
+    #[test]
+    fn test_md_to_html_body_with_toc_frontmatter_excluded() {
+        let md = "---\ntitle: Test\n---\n\n# Real Heading";
+        let (_html, toc) = md_to_html_body_with_toc(md, true);
+
+        assert_eq!(toc.len(), 1);
+        assert_eq!(toc[0].title, "Real Heading");
     }
 }
