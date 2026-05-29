@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="55%">
+      <stop offset="0%" stop-color="#1a3a3a"/>
+      <stop offset="100%" stop-color="#0d2222"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Circle background -->
+  <circle cx="256" cy="256" r="248" fill="url(#bg)" stroke="#2a5a5a" stroke-width="4"/>
+
+  <!-- 3D Diamond — behind the M, slightly left -->
+  <g transform="translate(176, 235)">
+    <polygon points="0,-108  88,0  0,-6" fill="#66fefe"/>
+    <polygon points="88,0  0,108  0,-6" fill="#45fefe"/>
+    <polygon points="0,108  -88,0  0,-6" fill="#005d5d"/>
+    <polygon points="-88,0  0,-108  0,-6" fill="#017d7d"/>
+    <line x1="0" y1="-108" x2="88" y2="0" stroke="#88ffff" stroke-width="1.5" opacity="0.35"/>
+    <line x1="-88" y1="0" x2="0" y2="-108" stroke="#55dddd" stroke-width="1" opacity="0.25"/>
+  </g>
+
+  <!-- "Mip" lettering -->
+
+  <!-- === M === large italic serif -->
+  <path d="
+    M 100,382  L 130,155
+    Q 132,142 144,138  L 158,138
+    L 216,318  L 274,138  L 288,138
+    Q 300,142 302,155
+    L 326,382  L 302,382  L 282,178
+    L 222,345  L 210,345
+    L 150,178  L 130,382  Z
+  " fill="#cccccc" stroke="#111" stroke-width="3" stroke-linejoin="round"/>
+
+  <!-- M serif feet (small horizontal bars) -->
+  <rect x="94" y="378" width="44" height="8" rx="1" fill="#cccccc" stroke="#111" stroke-width="2"/>
+  <rect x="296" y="378" width="38" height="8" rx="1" fill="#cccccc" stroke="#111" stroke-width="2"/>
+
+  <!-- === i === -->
+  <!-- i stem (italic slant) -->
+  <path d="
+    M 338,245  L 326,382  L 342,382  L 354,245  Z
+  " fill="#cccccc" stroke="#111" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- i dot -->
+  <circle cx="352" cy="212" r="10" fill="#cccccc" stroke="#111" stroke-width="2.5"/>
+
+  <!-- === p === -->
+  <!-- p stem (descends below baseline) -->
+  <path d="
+    M 364,245  L 342,432  L 358,432  L 380,245  Z
+  " fill="#cccccc" stroke="#111" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- p bowl (opens right) -->
+  <path d="
+    M 372,245
+    L 390,245
+    Q 416,252 422,280
+    Q 428,312 416,338
+    Q 406,358 386,366
+    Q 374,370 362,368
+    L 356,368
+    L 362,332
+    Q 374,336 386,326
+    Q 398,312 398,290
+    Q 398,270 390,258
+    Q 382,248 374,247
+    Z
+  " fill="#cccccc" stroke="#111" stroke-width="2.5" stroke-linejoin="round"/>
+</svg>

@@ -1,10 +1,11 @@
 ---
 # mip.rs-sczu
 title: error PathNotFound
-status: todo
+status: scrapped
 type: bug
+priority: normal
 created_at: 2026-05-28T11:56:44Z
-updated_at: 2026-05-28T11:56:44Z
+updated_at: 2026-05-29T12:59:10Z
 ---
 
 GitHub issue #10

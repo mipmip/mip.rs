@@ -30,7 +30,12 @@
             clippy
             pkgs.nodejs
             pkgs.yarn
+            gst_all_1.gstreamer
+            gst_all_1.gst-plugins-base
+            gst_all_1.gst-plugins-good
           ];
+
+          GST_PLUGIN_PATH = with pkgs.gst_all_1; "${gstreamer}/lib/gstreamer-1.0:${gst-plugins-base}/lib/gstreamer-1.0:${gst-plugins-good}/lib/gstreamer-1.0";
 
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
         };

@@ -1,5 +1,16 @@
 # Changelog mip.rs
 
+## Unreleased
+
+- add CLI argument parsing with `argh`: `--help`, `--version`, `--verbose` flags
+- fix panic when running without arguments (now prints help and exits cleanly)
+- add `--frontmatter` flag to display YAML frontmatter as a styled table
+- add dark mode with `--theme system|light|dark` (system default, reactive to OS changes)
+- add config file support at `~/.config/miprs/config.toml` (theme, frontmatter settings)
+- auto-embed video files (.webm, .mp4, .mov, .ogv) as playable `<video>` elements from link or image syntax
+- add GStreamer plugins to Nix packaging for WebKitGTK video playback
+- external links now open in default browser instead of navigating the preview
+
 ## v0.3.0 - 28 May 2026
 
 Linux-only from this version onwards.

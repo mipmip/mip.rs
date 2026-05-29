@@ -5,7 +5,7 @@ use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow};
 use gtk4::glib;
 use webkit6::prelude::*;
-use webkit6::WebView;
+use webkit6::{WebView, NavigationPolicyDecision, PolicyDecisionType};
 
 /// Remove the seed-polling JS from the generated HTML.
 /// Script 0: sets seedUrl/initialSeed vars
@@ -42,7 +42,8 @@ fn wait_for_server(port: u16) {
     eprintln!("warning: server not ready after 5s");
 }
 
-pub fn window(port: u16, temp_dir: PathBuf) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str) {
+    let is_system_theme = theme_mode == "system";
     let app = Application::builder()
         .application_id("org.mipmip.mip")
         .build();
@@ -56,6 +57,30 @@ pub fn window(port: u16, temp_dir: PathBuf) {
         let webview = WebView::new();
         webview.set_vexpand(true);
         webview.set_hexpand(true);
+
+        // Open external links in default browser
+        let local_origin = format!("http://localhost:{}", port);
+        webview.connect_decide_policy(move |_, decision, decision_type| {
+            if matches!(decision_type, PolicyDecisionType::NavigationAction | PolicyDecisionType::NewWindowAction) {
+                if let Some(nav_decision) = decision.downcast_ref::<NavigationPolicyDecision>() {
+                    if let Some(action) = nav_decision.navigation_action() {
+                        if let Some(request) = action.request() {
+                            if let Some(uri) = request.uri() {
+                                let uri_str = uri.as_str();
+                                if !uri_str.starts_with(&local_origin) && !uri_str.starts_with("about:") {
+                                    let _ = std::process::Command::new("xdg-open")
+                                        .arg(uri_str)
+                                        .spawn();
+                                    decision.ignore();
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        });
 
         // Load HTML directly, stripping the JS seed-polling scripts
         // since we handle reload from the Rust side.
@@ -79,13 +104,28 @@ pub fn window(port: u16, temp_dir: PathBuf) {
         let seed_path = seed_path.clone();
         let infile_path = std::env::args().nth(1).unwrap();
         let mut last_seed = std::fs::read_to_string(&seed_path).unwrap_or_default();
+        let mut last_system_dark = if is_system_theme { Some(crate::is_system_dark()) } else { None };
 
         glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+            // Check for system theme changes
+            if let Some(ref mut was_dark) = last_system_dark {
+                let now_dark = crate::is_system_dark();
+                if now_dark != *was_dark {
+                    *was_dark = now_dark;
+                    let class = if now_dark { "dark" } else { "light" };
+                    let js = format!(
+                        "document.documentElement.className = '{}';",
+                        class
+                    );
+                    webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                }
+            }
+
             if let Ok(current_seed) = std::fs::read_to_string(&seed_path)
                 && current_seed != last_seed {
                     last_seed = current_seed;
                     if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
-                        let html_body = crate::markdown::md_to_html_body(&md_content);
+                        let html_body = crate::markdown::md_to_html_body(&md_content, show_frontmatter);
                         let escaped = html_body
                             .replace('\\', "\\\\")
                             .replace('`', "\\`")

@@ -15,6 +15,8 @@ See the simple workflow in this video...
 
 [mip-video.webm](https://user-images.githubusercontent.com/658612/209807766-3df2fc42-e53a-4183-aff4-9ed0acc6e449.webm)
 
+[mip-video.webm](mip-video.webm)
+
 
 ## Features
 
@@ -50,22 +52,12 @@ mip [markdown file]
 ## Todo
 
 - [ ] prj: Readme best practices
-- [ ] app: command line options
-- [ ] app: improve error handling
-- [ ] app: use webview reload and not javascript reload
 - [ ] prj: refactor cleanup var names
 - [ ] prj: testing
 - [ ] prj: release workflow
   - [ ] auto build binaries at release
   - [ ] version tag script
   - [ ] set version and date in changelog
-- [ ] app: table of contents
-- [ ] app: reload keybinding
-- [x] app: rm temp files
-- [ ] app: vim keybindings
-- [ ] app: export pdf
-- [ ] app: export html
-- [ ] blog: mip.cr and mip.rs
 - [x] prog: nix build
 - [ ] app: linux desktop info
 

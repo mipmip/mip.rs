@@ -6,7 +6,7 @@ pkgs.rustPlatform.buildRustPackage rec {
   cargoLock.lockFile = ./Cargo.lock;
   src = ./.;
 
-  nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo gtk4 webkitgtk_6_0 ];
+  nativeBuildInputs = with pkgs; [ rustc cargo gcc cmake pkg-config glib cairo gtk4 webkitgtk_6_0 pkgs.wrapGAppsHook4 ];
   buildInputs = with pkgs; [
     rustfmt
     clippy
@@ -15,5 +15,14 @@ pkgs.rustPlatform.buildRustPackage rec {
     glib
     gtk4
     webkitgtk_6_0
+    gst_all_1.gstreamer
+    gst_all_1.gst-plugins-base
+    gst_all_1.gst-plugins-good
   ];
+
+  preFixup = ''
+    gappsWrapperArgs+=(
+      --prefix GST_PLUGIN_PATH : "${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0"
+    )
+  '';
 }
