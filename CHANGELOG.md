@@ -10,6 +10,10 @@
 - auto-embed video files (.webm, .mp4, .mov, .ogv) as playable `<video>` elements from link or image syntax
 - add GStreamer plugins to Nix packaging for WebKitGTK video playback
 - external links now open in default browser instead of navigating the preview
+- add test suite (35 tests): unit tests for markdown, view, port helpers; integration tests for config, server routes, markdown pipeline
+- refactor: extract pure `build_html()` from `to_file()`, extract `routes()` from `run_bro()`, add `Config::load_from(path)`
+- add `src/lib.rs` crate root for testability
+- add coverage tooling: `scripts/update-coverage.sh` with `cargo-tarpaulin`, plain-text percentage in README
 
 ## v0.3.0 - 28 May 2026
 
