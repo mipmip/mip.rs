@@ -1,8 +1,3 @@
-mod view;
-mod server;
-mod markdown;
-mod config;
-
 use argh::FromArgs;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::fs;
@@ -10,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process;
 use std::env;
 use std::net::TcpListener;
-use crate::server::RestBro;
+use mip::server::RestBro;
 
 /// mip - Markdown In Preview
 #[derive(FromArgs)]
@@ -42,7 +37,7 @@ fn get_available_port() -> Option<u16> {
         .find(|port| port_is_available(*port))
 }
 
-fn port_is_available(port: u16) -> bool {
+pub(crate) fn port_is_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
@@ -59,7 +54,7 @@ fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path
                 if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(path_file) {
-                        markdown::to_html(path_file, temp_dir, port, show_frontmatter, theme_class);
+                        mip::markdown::to_html(path_file, temp_dir, port, show_frontmatter, theme_class);
                     }
                 }
             },
@@ -67,26 +62,6 @@ fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path
         }
     }
     Ok(())
-}
-
-pub fn is_system_dark() -> bool {
-    // Check GNOME/freedesktop color-scheme setting
-    if let Ok(output) = std::process::Command::new("gsettings")
-        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if stdout.contains("prefer-dark") {
-            return true;
-        }
-    }
-    // Fallback: check GTK_THEME env var for dark variants
-    if let Ok(gtk_theme) = env::var("GTK_THEME") {
-        if gtk_theme.to_lowercase().contains("dark") {
-            return true;
-        }
-    }
-    false
 }
 
 fn string_to_static_str(s: String) -> &'static str {
@@ -116,7 +91,7 @@ fn main() {
     };
 
     // Load config and merge with CLI flags
-    let cfg = config::Config::load();
+    let cfg = mip::config::Config::load();
 
     let theme = if let Some(ref t) = cli.theme {
         if !["system", "light", "dark"].contains(&t.as_str()) {
@@ -133,7 +108,7 @@ fn main() {
         "dark" => "dark",
         _ => {
             // Detect system dark mode preference
-            if is_system_dark() { "dark" } else { "light" }
+            if mip::is_system_dark() { "dark" } else { "light" }
         }
     };
 
@@ -156,7 +131,7 @@ fn main() {
     let theme_class_string = theme_class.to_string();
 
     if let Some(available_port) = get_available_port() {
-        markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
+        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
 
         // Run tokio runtime in a separate thread so it doesn't compete
         // with the GTK4 main loop for the main thread.
@@ -180,9 +155,34 @@ fn main() {
             });
         });
 
-        view::window(available_port, temp_dir, show_frontmatter, theme);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme);
     }
     else{
         panic!("E2");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_port_is_available_on_free_port() {
+        // Use a high port that's very unlikely to be in use
+        assert!(port_is_available(19876));
+    }
+
+    #[test]
+    fn test_port_is_available_on_occupied_port() {
+        // Bind a port, then check it's not available
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(!port_is_available(port));
+        drop(listener);
+    }
+
+    #[test]
+    fn test_get_available_port_returns_some() {
+        assert!(get_available_port().is_some());
     }
 }

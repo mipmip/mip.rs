@@ -16,3 +16,7 @@ gray_matter = "0.2"
 argh = "0.1"
 toml = "0.8"
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full", "test-util", "macros"] }

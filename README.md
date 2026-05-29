@@ -1,3 +1,5 @@
+Coverage: 0%
+
 # Markdown Instant Preview - Rust edition
 
 ![](mip.png)

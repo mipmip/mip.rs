@@ -12,7 +12,7 @@ use webkit6::{WebView, NavigationPolicyDecision, PolicyDecisionType};
 /// Script 1: keydown handler + XHR polling + location.reload()
 /// Script 2: header link using seedUrl
 /// We strip scripts 0 and 1 since reload is handled from Rust.
-fn strip_seed_scripts(html: &str) -> String {
+pub(crate) fn strip_seed_scripts(html: &str) -> String {
     let mut result = html.to_string();
     // Remove the seedUrl variable script
     if let Some(start) = result.find("<script>var seedUrl=")
@@ -147,4 +147,51 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
     });
 
     app.run_with_args::<String>(&[]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_seed_scripts_removes_all_seed_scripts() {
+        let html = r#"<html>
+<head></head>
+<body>
+<div>content</div>
+<script>var seedUrl="http://localhost:8000/.temp.seed";var initialSeed="abc1234";</script>
+<script>document.addEventListener("keydown",function(e){});</script>
+<script>document.getElementById("header").onclick=function(){};</script>
+<script>console.log("keep me");</script>
+</body>
+</html>"#;
+
+        let result = strip_seed_scripts(html);
+
+        assert!(!result.contains("var seedUrl="));
+        assert!(!result.contains("document.addEventListener(\"keydown\""));
+        assert!(!result.contains("document.getElementById(\"header\")"));
+        assert!(result.contains("console.log(\"keep me\")"));
+        assert!(result.contains("<div>content</div>"));
+    }
+
+    #[test]
+    fn test_strip_seed_scripts_preserves_non_seed_content() {
+        let html = r#"<html><body><h1>Hello</h1><script>alert("safe")</script></body></html>"#;
+        let result = strip_seed_scripts(html);
+        assert_eq!(result, html);
+    }
+
+    #[test]
+    fn test_strip_seed_scripts_handles_empty_input() {
+        let result = strip_seed_scripts("");
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_strip_seed_scripts_handles_no_scripts() {
+        let html = "<html><body><p>No scripts here</p></body></html>";
+        let result = strip_seed_scripts(html);
+        assert_eq!(result, html);
+    }
 }

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -10,9 +10,16 @@ pub struct Config {
 }
 
 impl Config {
+    /// Load config from the default XDG path.
     pub fn load() -> Config {
         let path = config_path();
-        let content = match fs::read_to_string(&path) {
+        Self::load_from(&path)
+    }
+
+    /// Load config from an explicit path. Returns defaults if the file
+    /// is missing or malformed.
+    pub fn load_from(path: &Path) -> Config {
+        let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(_) => return Config::default(),
         };

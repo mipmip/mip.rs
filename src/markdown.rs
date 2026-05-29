@@ -11,7 +11,7 @@ use pulldown_cmark::{html, Options, Parser};
 #[folder = "asset/theme1"]
 struct Asset;
 
-fn pod_to_html_value(pod: &Pod) -> String {
+pub(crate) fn pod_to_html_value(pod: &Pod) -> String {
     match pod {
         Pod::String(s) => s.clone(),
         Pod::Integer(i) => i.to_string(),
@@ -147,6 +147,26 @@ pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
     rewrite_media_embeds(&html_output)
 }
 
+/// Build the complete HTML document from markdown content.
+/// This is a pure function: no I/O, no randomness.
+/// Takes markdown string, template string, seed, seed URL,
+/// show_frontmatter flag, and theme class; returns complete HTML string.
+pub fn build_html(
+    markdown_input: &str,
+    template: &str,
+    seed: &str,
+    seed_url: &str,
+    show_frontmatter: bool,
+    theme_class: &str,
+) -> String {
+    let html_body = md_to_html_body(markdown_input, show_frontmatter);
+    template
+        .replace("#{BODY}", &html_body)
+        .replace("#{INITIALSEED}", seed)
+        .replace("#{SEEDURL}", seed_url)
+        .replace("#{THEME_CLASS}", theme_class)
+}
+
 pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str){
 
     let markdown_input = fs::read_to_string(infile);
@@ -155,26 +175,6 @@ pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_front
 
 fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str){
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
-
-    let matter = Matter::<YAML>::new();
-    let result = matter.parse(markdown_input);
-
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TASKLISTS);
-    options.insert(Options::ENABLE_TABLES);
-    let parser = Parser::new_ext(&result.content, options);
-
-    let mut html_output = String::new();
-
-    if show_frontmatter {
-        if let Some(ref data) = result.data {
-            html_output.push_str(&frontmatter_to_html(data));
-        }
-    }
-
-    html::push_html(&mut html_output, parser);
-    let html_output = rewrite_media_embeds(&html_output);
 
     let seed: String = rand::rng()
         .sample_iter(&Alphanumeric)
@@ -185,19 +185,67 @@ fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_f
     let index_html = Asset::get("template.html").unwrap();
     let index_html_str = std::str::from_utf8(index_html.data.as_ref());
     match index_html_str {
-        Ok(index_html_str) => {
-            let html_complete1 = index_html_str.replace("#{BODY}", &html_output);
-            let html_complete2 = html_complete1.replace("#{INITIALSEED}", &seed);
-            let html_complete3 = html_complete2.replace("#{SEEDURL}", &seed_url);
-            let html_complete3 = html_complete3.replace("#{THEME_CLASS}", theme_class);
+        Ok(template) => {
+            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class);
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
                 eprintln!("warning: could not write seed file: {}", e);
                 return;
             }
-            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete3) {
+            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete) {
                 eprintln!("warning: could not write html file: {}", e);
             }
         },
         Err(_) => println!("URF this..no file")
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pod_to_html_value_string() {
+        let pod = Pod::String("hello".to_string());
+        assert_eq!(pod_to_html_value(&pod), "hello");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_integer() {
+        let pod = Pod::Integer(42);
+        assert_eq!(pod_to_html_value(&pod), "42");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_float() {
+        let pod = Pod::Float(3.14);
+        assert_eq!(pod_to_html_value(&pod), "3.14");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_boolean() {
+        assert_eq!(pod_to_html_value(&Pod::Boolean(true)), "true");
+        assert_eq!(pod_to_html_value(&Pod::Boolean(false)), "false");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_null() {
+        assert_eq!(pod_to_html_value(&Pod::Null), "");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_array() {
+        let pod = Pod::Array(vec![
+            Pod::String("a".to_string()),
+            Pod::Integer(1),
+        ]);
+        assert_eq!(pod_to_html_value(&pod), "a, 1");
+    }
+
+    #[test]
+    fn test_pod_to_html_value_hash() {
+        let mut map = std::collections::HashMap::new();
+        map.insert("key".to_string(), Pod::String("val".to_string()));
+        let pod = Pod::Hash(map);
+        assert_eq!(pod_to_html_value(&pod), "key: val");
+    }
 }
