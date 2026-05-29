@@ -16,6 +16,9 @@ build:
 test:
 	cargo test
 
+coverage:
+	bash scripts/update-coverage.sh
+
 clean:
 	rm -fv ./target
 
