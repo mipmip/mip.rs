@@ -38,6 +38,10 @@ struct Cli {
     /// generate default config file at ~/.config/miprs/config.toml
     #[argh(switch)]
     initconf: bool,
+
+    /// disable math rendering
+    #[argh(switch)]
+    no_math: bool,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -49,31 +53,55 @@ pub(crate) fn port_is_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str) -> notify::Result<()> {
+fn watch(
+    path_dir: PathBuf,
+    path_file: String,
+    temp_dir: PathBuf,
+    port: u16,
+    show_frontmatter: bool,
+    theme_class: String,
+    new_file_rx: std::sync::mpsc::Receiver<PathBuf>,
+    math: bool,
+) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
+    let mut current_dir = path_dir;
+    let mut current_file = path_file;
 
-    watcher.watch(path_dir.as_ref(), RecursiveMode::Recursive)?;
+    watcher.watch(&current_dir, RecursiveMode::Recursive)?;
 
-    for res in rx {
-        match res {
-            Ok(event) => {
+    loop {
+        // Check for new file paths from :open
+        while let Ok(new_path) = new_file_rx.try_recv() {
+            let new_file = new_path.to_string_lossy().to_string();
+            if let Some(new_dir) = new_path.parent() {
+                let new_dir = new_dir.to_path_buf();
+                if new_dir != current_dir {
+                    let _ = watcher.unwatch(&current_dir);
+                    let _ = watcher.watch(&new_dir, RecursiveMode::Recursive);
+                    current_dir = new_dir;
+                }
+            }
+            current_file = new_file;
+        }
+
+        // Check for file events with a timeout
+        match rx.recv_timeout(std::time::Duration::from_millis(200)) {
+            Ok(Ok(event)) => {
                 if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
-                    if teststr.contains(path_file) {
-                        mip::markdown::to_html(path_file, temp_dir, port, show_frontmatter, theme_class);
+                    if teststr.contains(&current_file) {
+                        mip::markdown::to_html(&current_file, &temp_dir, port, show_frontmatter, &theme_class, math);
                     }
                 }
-            },
-            Err(e) => println!("watch error: {:?}", e),
+            }
+            Ok(Err(e)) => println!("watch error: {:?}", e),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
     Ok(())
-}
-
-fn string_to_static_str(s: String) -> &'static str {
-    Box::leak(s.into_boxed_str())
 }
 
 fn main() {
@@ -151,21 +179,40 @@ fn main() {
     // Resolve runcmd: CLI overrides config
     let runcmd = cli.runcmd.as_deref().or_else(|| cfg.runcmd());
 
-    let path_file = String::from(&path_file0);
+    // CLI --no-math overrides config (flag presence means false)
+    let math = if cli.no_math { false } else { cfg.math() };
 
-    let s_slice = string_to_static_str(path_file0);
+    let path_file = path_file0;
 
-    let path_parsed1 = Path::new(s_slice);
-    let path_dir_for_server = path_parsed1.parent().unwrap();
-
-    let s_slice2 = string_to_static_str(path_dir_for_server.to_str().unwrap().to_string());
+    let path_parsed = Path::new(&path_file);
+    let path_dir_for_server = {
+        let parent = path_parsed.parent().unwrap();
+        if parent.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            parent.to_path_buf()
+        }
+    };
+    // Canonicalize so the symlink target is absolute
+    let path_dir_for_server = fs::canonicalize(&path_dir_for_server)
+        .unwrap_or(path_dir_for_server);
 
     let temp_dir: PathBuf = env::temp_dir().join(format!("mip-{}", process::id()));
     fs::create_dir_all(&temp_dir).expect("Unable to create temp directory");
-    let temp_dir_str = string_to_static_str(temp_dir.to_str().unwrap().to_string());
+
+    // Create docroot symlink pointing to the document's parent directory
+    let docroot = temp_dir.join("docroot");
+    if let Err(e) = std::os::unix::fs::symlink(&path_dir_for_server, &docroot) {
+        eprintln!("warning: could not create docroot symlink: {}", e);
+    }
+
     let temp_dir_for_watcher = temp_dir.clone();
+    let temp_dir_str = temp_dir.to_str().unwrap().to_string();
     let theme_class_string = theme_class.to_string();
     let path_file_for_view = path_file.clone();
+    let path_file_for_watcher = path_file.clone();
+    let path_dir_for_watcher = path_dir_for_server.clone();
+    let theme_class_for_watcher = theme_class_string.clone();
     let runcmd_string = runcmd.map(|s| s.to_string());
     let sidetoc_width = cfg.sidetoc_width();
     let sidetoc_position = cfg.sidetoc_position().to_string();
@@ -179,7 +226,13 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
+        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string, math);
+
+        // Channel for :open to send new file paths to the watcher
+        let (new_file_tx, new_file_rx) = std::sync::mpsc::channel::<PathBuf>();
+
+        // Serve from the docroot symlink so :open can update the target
+        let server_dir = docroot.to_str().unwrap().to_string();
 
         // Run tokio runtime in a separate thread so it doesn't compete
         // with the GTK4 main loop for the main thread.
@@ -187,23 +240,29 @@ fn main() {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
                 let watcher_handle = tokio::spawn(async move {
-                    let path_parsed = Path::new(&path_file);
-                    let path_dir_for_watcher = path_parsed.parent().unwrap();
-
-                    if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port, show_frontmatter, &theme_class_string) {
+                    if let Err(e) = watch(
+                        path_dir_for_watcher,
+                        path_file_for_watcher,
+                        temp_dir_for_watcher,
+                        available_port,
+                        show_frontmatter,
+                        theme_class_for_watcher,
+                        new_file_rx,
+                        math,
+                    ) {
                         println!("error: {:?}", e)
                     }
                 });
 
                 let server_handle = tokio::spawn(async move {
-                    RestBro::run_bro(s_slice2, temp_dir_str, available_port).await;
+                    RestBro::run_bro(server_dir, temp_dir_str, available_port).await;
                 });
 
                 let _ = tokio::join!(watcher_handle, server_handle);
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size());
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size(), new_file_tx, math);
     }
     else{
         panic!("E2");

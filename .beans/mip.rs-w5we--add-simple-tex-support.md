@@ -1,7 +1,8 @@
 ---
 # mip.rs-w5we
 title: Add simple Tex support
-status: in-progress
+status: completed
+openspec-link: openspec/changes/archive/2026-06-01-add-katex-math
 type: feature
 priority: normal
 created_at: 2026-05-28T11:56:42Z

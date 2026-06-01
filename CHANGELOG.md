@@ -46,6 +46,11 @@
 - Tab completion for setting names after `:set `
 - fix Ctrl+key keybindings not matching when GDK sends control character keyvals
 - add persistent command bar history with ↑/↓ navigation and prefix filtering (`history_size` config, default 50)
+- add TeX math rendering via KaTeX: inline `$...$` and display `$$...$$` with pulldown-cmark ENABLE_MATH
+- KaTeX JS, CSS, and fonts bundled offline (~600KB), served from embedded assets
+- math re-renders on file change without page reload
+- add `math` config option (default true) and `--no-math` CLI flag
+- fix GTK init panic when `set_default_icon_name` is called before Application::run
 
 ## v0.3.0 - 28 May 2026
 

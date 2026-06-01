@@ -1,11 +1,10 @@
 ---
 # mip.rs-1n46
 title: some this temp seed error
-status: draft
+status: completed
 type: task
 priority: normal
 created_at: 2026-06-01T13:39:09Z
-updated_at: 2026-06-01T13:39:13Z
+updated_at: 2026-06-01T15:03:24Z
 ---
 
-warning: could not write seed file: No such file or directory (os error 2)

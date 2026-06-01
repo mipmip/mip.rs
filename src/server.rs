@@ -1,4 +1,25 @@
+use rust_embed::Embed;
 use warp::Filter;
+
+#[derive(Embed)]
+#[folder = "asset/katex"]
+struct KatexAsset;
+
+fn mime_from_path(path: &str) -> &'static str {
+    if path.ends_with(".js") {
+        "application/javascript"
+    } else if path.ends_with(".css") {
+        "text/css"
+    } else if path.ends_with(".woff2") {
+        "font/woff2"
+    } else if path.ends_with(".woff") {
+        "font/woff"
+    } else if path.ends_with(".ttf") {
+        "font/ttf"
+    } else {
+        "application/octet-stream"
+    }
+}
 
 pub struct RestBro;
 
@@ -13,16 +34,38 @@ impl RestBro {
             .and(warp::fs::file(format!("{}/.temp.html", temp_dir)));
         let temp_seed = warp::path(".temp.seed")
             .and(warp::fs::file(format!("{}/.temp.seed", temp_dir)));
+
+        let katex = warp::path("katex")
+            .and(warp::path::tail())
+            .and_then(|tail: warp::path::Tail| async move {
+                let path = tail.as_str();
+                match KatexAsset::get(path) {
+                    Some(content) => {
+                        let mime = mime_from_path(path);
+                        Ok(warp::reply::with_header(
+                            warp::reply::with_header(
+                                content.data.to_vec(),
+                                "content-type",
+                                mime,
+                            ),
+                            "cache-control",
+                            "public, max-age=31536000",
+                        ))
+                    }
+                    None => Err(warp::reject::not_found()),
+                }
+            });
+
         let assets = warp::fs::dir(path_dir);
 
-        temp_html.or(temp_seed).or(assets)
+        temp_html.or(temp_seed).or(katex).or(assets)
     }
 
-    pub async fn run_bro(path_dir: &'static str, temp_dir: &'static str, port: u16) {
+    pub async fn run_bro(path_dir: String, temp_dir: String, port: u16) {
 
         println!("{}", path_dir);
 
-        let routes = Self::routes(path_dir.to_string(), temp_dir.to_string());
+        let routes = Self::routes(path_dir, temp_dir);
 
         warp::serve(routes)
             .run(([127, 0, 0, 1], port))

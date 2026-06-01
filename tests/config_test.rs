@@ -141,3 +141,24 @@ fn test_default_config_template_parses_to_config() {
     assert_eq!(cfg.sidetoc_width(), 250);
     assert_eq!(cfg.sidetoc_position(), "left");
 }
+
+#[test]
+fn test_load_from_math_true() {
+    let file = write_temp_config("math = true\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.math());
+}
+
+#[test]
+fn test_load_from_math_false() {
+    let file = write_temp_config("math = false\n");
+    let cfg = Config::load_from(file.path());
+    assert!(!cfg.math());
+}
+
+#[test]
+fn test_load_from_math_missing_defaults_to_true() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.math());
+}

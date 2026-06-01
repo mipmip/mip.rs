@@ -14,6 +14,7 @@ pub struct Config {
     pub paragraph_numbers: Option<bool>,
     pub paragraph_numbers_start: Option<u8>,
     pub history_size: Option<u32>,
+    pub math: Option<bool>,
 }
 
 impl Config {
@@ -99,6 +100,10 @@ impl Config {
     pub fn history_size(&self) -> usize {
         self.history_size.unwrap_or(50) as usize
     }
+
+    pub fn math(&self) -> bool {
+        self.math.unwrap_or(true)
+    }
 }
 
 /// Returns the documented default config template.
@@ -131,6 +136,9 @@ paragraph_numbers = false
 # Heading level to start numbering from (1 = H1, 2 = H2, etc.)
 # Useful when H1 is a document title and you want numbering from H2
 paragraph_numbers_start = 1
+
+# Enable TeX math rendering via KaTeX ($..$ inline, $$...$$ display)
+math = true
 
 # Maximum number of command bar history entries to keep
 history_size = 50

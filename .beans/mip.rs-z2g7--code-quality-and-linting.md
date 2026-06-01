@@ -1,7 +1,7 @@
 ---
 # mip.rs-z2g7
 title: code quality and linting
-status: draft
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-05-29T14:24:15Z
