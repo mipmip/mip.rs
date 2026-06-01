@@ -180,9 +180,24 @@ pub fn md_to_html_body_with_toc(
     show_frontmatter: bool,
     paragraph_numbers: bool,
     paragraph_numbers_start: u8,
-) -> (String, Vec<TocEntry>) {
+) -> (String, Vec<TocEntry>, Option<String>) {
     let matter = Matter::<YAML>::new();
     let result = matter.parse(markdown_input);
+
+    // Extract title from frontmatter if present
+    let frontmatter_title = result.data.as_ref().and_then(|data| {
+        if let Pod::Hash(map) = data {
+            map.get("title").and_then(|v| {
+                if let Pod::String(s) = v {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    });
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
@@ -213,7 +228,7 @@ pub fn md_to_html_body_with_toc(
         }
     }
 
-    (html_output, toc)
+    (html_output, toc, frontmatter_title)
 }
 
 /// Compute hierarchical section numbers for TOC entries.
@@ -354,7 +369,7 @@ fn rewrite_media_embeds(html: &str) -> String {
 
 /// Convert raw markdown text to HTML body (without template wrapper).
 pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
-    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1);
+    let (html, _toc, _title) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1);
     html
 }
 
@@ -517,7 +532,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_basic() {
         let md = "# Title\n\n## Section\n\nText\n\n### Sub";
-        let (html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (html, toc, _title) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0], TocEntry { level: 1, title: "Title".into(), anchor_id: "title".into() });
@@ -532,7 +547,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_skipped_levels() {
         let md = "# Top\n\n### Skipped h2\n\n## Back to h2";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc, _title) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0].level, 1);
@@ -543,14 +558,14 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_no_headings() {
         let md = "Just a paragraph.\n\nAnother one.";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc, _title) = md_to_html_body_with_toc(md, false, false, 1);
         assert!(toc.is_empty());
     }
 
     #[test]
     fn test_md_to_html_body_with_toc_duplicate_headings() {
         let md = "# Intro\n\n## Intro\n\n### Intro";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc, _title) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc[0].anchor_id, "intro");
         assert_eq!(toc[1].anchor_id, "intro-1");
@@ -560,7 +575,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_frontmatter_excluded() {
         let md = "---\ntitle: Test\n---\n\n# Real Heading";
-        let (_html, toc) = md_to_html_body_with_toc(md, true, false, 1);
+        let (_html, toc, _title) = md_to_html_body_with_toc(md, true, false, 1);
 
         assert_eq!(toc.len(), 1);
         assert_eq!(toc[0].title, "Real Heading");
@@ -621,7 +636,7 @@ mod tests {
     #[test]
     fn test_section_numbers_with_toc_integration() {
         let md = "# Title\n\n## First\n\n### Sub\n\n## Second";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, true, 2);
+        let (_html, toc, _title) = md_to_html_body_with_toc(md, false, true, 2);
         // H1 has no number, H2 starts at 1
         assert_eq!(toc[0].title, "Title"); // no number
         assert_eq!(toc[1].title, "1 First");
@@ -632,8 +647,29 @@ mod tests {
     #[test]
     fn test_section_numbers_in_html() {
         let md = "# Heading One\n\n## Heading Two";
-        let (html, _toc) = md_to_html_body_with_toc(md, false, true, 1);
+        let (html, _toc, _title) = md_to_html_body_with_toc(md, false, true, 1);
         assert!(html.contains("<span class=\"section-number\">1</span> Heading One"));
         assert!(html.contains("<span class=\"section-number\">1.1</span> Heading Two"));
+    }
+
+    #[test]
+    fn test_frontmatter_title_present() {
+        let md = "---\ntitle: My Document\n---\n\n# Heading";
+        let (_html, _toc, title) = md_to_html_body_with_toc(md, false, false, 1);
+        assert_eq!(title, Some("My Document".to_string()));
+    }
+
+    #[test]
+    fn test_frontmatter_title_missing() {
+        let md = "---\nauthor: John\n---\n\n# Heading";
+        let (_html, _toc, title) = md_to_html_body_with_toc(md, false, false, 1);
+        assert_eq!(title, None);
+    }
+
+    #[test]
+    fn test_no_frontmatter() {
+        let md = "# Just a heading\n\nSome content.";
+        let (_html, _toc, title) = md_to_html_body_with_toc(md, false, false, 1);
+        assert_eq!(title, None);
     }
 }

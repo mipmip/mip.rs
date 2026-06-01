@@ -18,11 +18,11 @@ impl RestBro {
         temp_html.or(temp_seed).or(assets)
     }
 
-    pub async fn run_bro(path_dir: &'static str, temp_dir: &'static str, port: u16) {
+    pub async fn run_bro(path_dir: String, temp_dir: String, port: u16) {
 
         println!("{}", path_dir);
 
-        let routes = Self::routes(path_dir.to_string(), temp_dir.to_string());
+        let routes = Self::routes(path_dir, temp_dir);
 
         warp::serve(routes)
             .run(([127, 0, 0, 1], port))

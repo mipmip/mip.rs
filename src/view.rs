@@ -117,6 +117,8 @@ pub struct RuntimeSettings {
     pub paragraph_numbers_start: std::cell::Cell<u8>,
     pub theme: std::cell::RefCell<String>,
     pub force_render: std::cell::Cell<bool>,
+    pub infile: std::cell::RefCell<String>,
+    pub filename: std::cell::RefCell<String>,
 }
 
 struct CommandContext {
@@ -130,6 +132,9 @@ struct CommandContext {
     sidetoc_width: i32,
     sidetoc_open: std::cell::Cell<bool>,
     settings: RuntimeSettings,
+    watcher_tx: std::sync::mpsc::Sender<PathBuf>,
+    temp_dir: PathBuf,
+    port: u16,
 }
 
 fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
@@ -140,12 +145,46 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
         "open" | "o" => {
             if !arg.is_empty() {
                 let path = crate::command::expand_tilde(arg);
-                let path = std::path::Path::new(&path);
-                if path.exists() {
-                    let _ = std::process::Command::new(std::env::current_exe().unwrap())
-                        .arg(path)
-                        .spawn();
-                    ctx.app.quit();
+                let path_ref = std::path::Path::new(&path);
+                if path_ref.exists() {
+                    let new_infile = path_ref.canonicalize()
+                        .unwrap_or_else(|_| path_ref.to_path_buf())
+                        .to_string_lossy()
+                        .to_string();
+                    let new_filename = path_ref.file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "MiP".to_string());
+
+                    // Update infile and filename in settings
+                    *ctx.settings.infile.borrow_mut() = new_infile.clone();
+                    *ctx.settings.filename.borrow_mut() = new_filename.clone();
+
+                    // Update docroot symlink for server
+                    if let Some(parent) = path_ref.canonicalize().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())) {
+                        let docroot = ctx.temp_dir.join("docroot");
+                        let _ = std::fs::remove_file(&docroot);
+                        let _ = std::os::unix::fs::symlink(&parent, &docroot);
+                    }
+
+                    // Send new path to watcher thread
+                    let _ = ctx.watcher_tx.send(PathBuf::from(&new_infile));
+
+                    // Re-render immediately
+                    let sf = ctx.settings.frontmatter.get();
+                    let theme_str = ctx.settings.theme.borrow().clone();
+                    let theme_class = match theme_str.as_str() {
+                        "light" => "light",
+                        "dark" => "dark",
+                        _ => if crate::is_system_dark() { "dark" } else { "light" },
+                    };
+                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class);
+
+                    // Update window title
+                    let window_title = format!("{} - MiP", new_filename);
+                    ctx.window.set_title(Some(&window_title));
+
+                    // Force re-render in poll loop
+                    ctx.settings.force_render.set(true);
                 }
             }
         }
@@ -398,7 +437,7 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
@@ -417,6 +456,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
     let seed_path = temp_dir.join(".temp.seed");
     let history_for_shutdown = history.clone();
     let history_path_for_shutdown = history_path.clone();
+    let temp_dir_cleanup = temp_dir.clone();
 
     app.connect_activate(move |app| {
         wait_for_server(port);
@@ -458,11 +498,11 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
 
         // Extract initial TOC
         let infile_path = infile.clone();
-        let initial_toc = if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
-            let (_html, toc) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter, paragraph_numbers, paragraph_numbers_start);
-            toc
+        let (initial_toc, initial_title) = if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
+            let (_html, toc, title) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter, paragraph_numbers, paragraph_numbers_start);
+            (toc, title)
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
 
         // Build TOC widgets (always created, hidden by default)
@@ -511,9 +551,20 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         }
         // Track whether sidetoc is open
 
+        // Compute initial window title
+        let filename = std::path::Path::new(&infile_path)
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "MiP".to_string());
+        let window_title = if let Some(ref title) = initial_title {
+            format!("{} - MiP", title)
+        } else {
+            format!("{} - MiP", filename)
+        };
+
         let window_ref = ApplicationWindow::builder()
             .application(app)
-            .title("MiP")
+            .title(&window_title)
             .default_width(800)
             .default_height(600)
             .child(&paned)
@@ -536,7 +587,12 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 paragraph_numbers_start: std::cell::Cell::new(paragraph_numbers_start),
                 theme: std::cell::RefCell::new(theme_mode.to_string()),
                 force_render: std::cell::Cell::new(false),
+                infile: std::cell::RefCell::new(infile_path.clone()),
+                filename: std::cell::RefCell::new(filename),
             },
+            watcher_tx: watcher_tx.clone(),
+            temp_dir: temp_dir.clone(),
+            port,
         });
 
         // Command bar (hidden by default)
@@ -1010,11 +1066,21 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             };
 
             if seed_changed || force {
-                    if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
+                    let current_infile = ctx_for_poll.settings.infile.borrow().clone();
+                    if let Ok(md_content) = std::fs::read_to_string(&current_infile) {
                         let sf = ctx_for_poll.settings.frontmatter.get();
                         let pn = ctx_for_poll.settings.paragraph_numbers.get();
                         let pns = ctx_for_poll.settings.paragraph_numbers_start.get();
-                        let (html_body, toc_entries) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns);
+                        let (html_body, toc_entries, doc_title) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns);
+
+                        // Update window title
+                        let current_filename = ctx_for_poll.settings.filename.borrow().clone();
+                        let title = if let Some(ref t) = doc_title {
+                            format!("{} - MiP", t)
+                        } else {
+                            format!("{} - MiP", current_filename)
+                        };
+                        ctx_for_poll.window.set_title(Some(&title));
 
                         // Only update WebView if content actually changed
                         if html_body != last_html_body {
@@ -1043,7 +1109,6 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         });
     });
 
-    let temp_dir_cleanup = temp_dir.clone();
     app.connect_shutdown(move |_| {
         history_for_shutdown.borrow().save(&history_path_for_shutdown);
         let _ = std::fs::remove_dir_all(&temp_dir_cleanup);
