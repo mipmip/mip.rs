@@ -1,20 +1,41 @@
-/// Pure command-mode logic: parsing, matching, tilde expansion, wildmenu markup.
-/// All functions here are free of GTK dependencies for testability.
+//! Pure command-mode logic: parsing, matching, tilde expansion, wildmenu markup.
+//! All functions here are free of GTK dependencies for testability.
 
 const COMMANDS: &[&str] = &[
-    "close", "document_focus", "o", "open", "print", "q",
+    "close",
+    "document_focus",
+    "o",
+    "open",
+    "print",
+    "q",
     "quicktoc",
-    "scroll_bottom", "scroll_down", "scroll_half_down", "scroll_half_up",
-    "scroll_next_heading", "scroll_page_down", "scroll_page_up",
-    "scroll_prev_heading", "scroll_top", "scroll_up",
+    "scroll_bottom",
+    "scroll_down",
+    "scroll_half_down",
+    "scroll_half_up",
+    "scroll_next_heading",
+    "scroll_page_down",
+    "scroll_page_up",
+    "scroll_prev_heading",
+    "scroll_top",
+    "scroll_up",
     "set",
-    "sidetoc_close", "sidetoc_expand_width", "sidetoc_focus", "sidetoc_open",
-    "sidetoc_shrink_width", "sidetoc_toggle",
-    "zoom_in", "zoom_out", "zoom_reset",
+    "sidetoc_close",
+    "sidetoc_expand_width",
+    "sidetoc_focus",
+    "sidetoc_open",
+    "sidetoc_shrink_width",
+    "sidetoc_toggle",
+    "zoom_in",
+    "zoom_out",
+    "zoom_reset",
 ];
 
 const SETTINGS: &[&str] = &[
-    "frontmatter", "paragraph_numbers", "paragraph_numbers_start", "theme",
+    "frontmatter",
+    "paragraph_numbers",
+    "paragraph_numbers_start",
+    "theme",
 ];
 
 /// Match a prefix against the known settings list. Returns sorted matches.
@@ -27,9 +48,9 @@ pub fn match_settings(prefix: &str) -> Vec<String> {
 }
 
 pub fn expand_tilde(path: &str) -> String {
-    if path.starts_with('~') {
+    if let Some(stripped) = path.strip_prefix('~') {
         let home = std::env::var("HOME").unwrap_or_default();
-        format!("{}{}", home, &path[1..])
+        format!("{}{}", home, stripped)
     } else {
         path.to_string()
     }
@@ -76,10 +97,18 @@ pub fn match_paths(path_fragment: &str) -> Vec<String> {
         (expanded.as_str().to_string(), "".to_string())
     } else {
         let p = std::path::Path::new(&expanded);
-        let dir = p.parent()
-            .map_or(".", |d| if d.as_os_str().is_empty() { "." } else { d.to_str().unwrap_or(".") })
+        let dir = p
+            .parent()
+            .map_or(".", |d| {
+                if d.as_os_str().is_empty() {
+                    "."
+                } else {
+                    d.to_str().unwrap_or(".")
+                }
+            })
             .to_string();
-        let file = p.file_name()
+        let file = p
+            .file_name()
             .map_or("", |f| f.to_str().unwrap_or(""))
             .to_string();
         (dir, file)
@@ -96,11 +125,7 @@ pub fn match_paths(path_fragment: &str) -> Vec<String> {
                 } else {
                     format!("{}/{}", dir.trim_end_matches('/'), name)
                 };
-                let full = if is_dir {
-                    format!("{}/", full)
-                } else {
-                    full
-                };
+                let full = if is_dir { format!("{}/", full) } else { full };
                 found.push(full);
             }
         }
@@ -126,8 +151,7 @@ pub fn unexpand_tilde(path: &str, original_used_tilde: bool) -> String {
 /// Extract just the filename from a full path for display in the wildmenu.
 pub fn display_name(path: &str) -> &str {
     // For paths ending in /, show the dir name with /
-    if path.ends_with('/') {
-        let trimmed = &path[..path.len() - 1];
+    if let Some(trimmed) = path.strip_suffix('/') {
         let name_start = trimmed.rfind('/').map_or(0, |i| i + 1);
         &path[name_start..]
     } else {
@@ -192,7 +216,7 @@ pub fn wildmenu_markup(matches: &[String], current_index: usize, max_visible: us
 /// A key combination: a key name + modifier flags.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KeyCombo {
-    pub key: String,       // lowercase key name, e.g. "p", "tab", "f1"
+    pub key: String, // lowercase key name, e.g. "p", "tab", "f1"
     pub ctrl: bool,
     pub shift: bool,
     pub alt: bool,
@@ -253,15 +277,82 @@ fn normalize_key_name(name: &str) -> String {
 }
 
 fn is_known_key(name: &str) -> bool {
-    matches!(name,
-        "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" |
-        "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" |
-        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" |
-        "tab" | "escape" | "return" | "enter" | "space" | "backspace" | "delete" |
-        "up" | "down" | "left" | "right" | "home" | "end" | "pageup" | "pagedown" |
-        "f1" | "f2" | "f3" | "f4" | "f5" | "f6" | "f7" | "f8" | "f9" | "f10" | "f11" | "f12" |
-        "minus" | "plus" | "equal" | "bracketleft" | "bracketright" | "semicolon" |
-        "apostrophe" | "comma" | "period" | "slash" | "backslash" | "grave"
+    matches!(
+        name,
+        "a" | "b"
+            | "c"
+            | "d"
+            | "e"
+            | "f"
+            | "g"
+            | "h"
+            | "i"
+            | "j"
+            | "k"
+            | "l"
+            | "m"
+            | "n"
+            | "o"
+            | "p"
+            | "q"
+            | "r"
+            | "s"
+            | "t"
+            | "u"
+            | "v"
+            | "w"
+            | "x"
+            | "y"
+            | "z"
+            | "0"
+            | "1"
+            | "2"
+            | "3"
+            | "4"
+            | "5"
+            | "6"
+            | "7"
+            | "8"
+            | "9"
+            | "tab"
+            | "escape"
+            | "return"
+            | "enter"
+            | "space"
+            | "backspace"
+            | "delete"
+            | "up"
+            | "down"
+            | "left"
+            | "right"
+            | "home"
+            | "end"
+            | "pageup"
+            | "pagedown"
+            | "f1"
+            | "f2"
+            | "f3"
+            | "f4"
+            | "f5"
+            | "f6"
+            | "f7"
+            | "f8"
+            | "f9"
+            | "f10"
+            | "f11"
+            | "f12"
+            | "minus"
+            | "plus"
+            | "equal"
+            | "bracketleft"
+            | "bracketright"
+            | "semicolon"
+            | "apostrophe"
+            | "comma"
+            | "period"
+            | "slash"
+            | "backslash"
+            | "grave"
     )
 }
 
@@ -270,35 +361,40 @@ pub fn keyval_to_name(keyval: u32) -> Option<String> {
     // Map GDK key constants to our key names
     // We use the numeric values to avoid depending on gtk4::gdk here
     let name = match keyval {
-        0xff09 => "tab",          // GDK_KEY_Tab
-        0xfe20 => "tab",          // GDK_KEY_ISO_Left_Tab (shift+tab)
-        0xff1b => "escape",       // GDK_KEY_Escape
-        0xff0d => "return",       // GDK_KEY_Return
-        0x020  => "space",        // GDK_KEY_space
-        0xff08 => "backspace",    // GDK_KEY_BackSpace
-        0xffff => "delete",       // GDK_KEY_Delete
-        0xff52 => "up",           // GDK_KEY_Up
-        0xff54 => "down",         // GDK_KEY_Down
-        0xff51 => "left",         // GDK_KEY_Left
-        0xff53 => "right",        // GDK_KEY_Right
-        0xff50 => "home",         // GDK_KEY_Home
-        0xff57 => "end",          // GDK_KEY_End
-        0xff55 => "pageup",       // GDK_KEY_Page_Up
-        0xff56 => "pagedown",     // GDK_KEY_Page_Down
-        0xffbe..=0xffc9 => {      // GDK_KEY_F1..F12
+        0xff09 => "tab",       // GDK_KEY_Tab
+        0xfe20 => "tab",       // GDK_KEY_ISO_Left_Tab (shift+tab)
+        0xff1b => "escape",    // GDK_KEY_Escape
+        0xff0d => "return",    // GDK_KEY_Return
+        0x020 => "space",      // GDK_KEY_space
+        0xff08 => "backspace", // GDK_KEY_BackSpace
+        0xffff => "delete",    // GDK_KEY_Delete
+        0xff52 => "up",        // GDK_KEY_Up
+        0xff54 => "down",      // GDK_KEY_Down
+        0xff51 => "left",      // GDK_KEY_Left
+        0xff53 => "right",     // GDK_KEY_Right
+        0xff50 => "home",      // GDK_KEY_Home
+        0xff57 => "end",       // GDK_KEY_End
+        0xff55 => "pageup",    // GDK_KEY_Page_Up
+        0xff56 => "pagedown",  // GDK_KEY_Page_Down
+        0xffbe..=0xffc9 => {
+            // GDK_KEY_F1..F12
             let n = keyval - 0xffbe + 1;
             return Some(format!("f{}", n));
         }
-        0x061..=0x07a => {        // GDK_KEY_a..z
+        0x061..=0x07a => {
+            // GDK_KEY_a..z
             return Some(String::from(char::from(keyval as u8)));
         }
-        0x041..=0x05a => {        // GDK_KEY_A..Z (uppercase, map to lowercase)
+        0x041..=0x05a => {
+            // GDK_KEY_A..Z (uppercase, map to lowercase)
             return Some(String::from(char::from((keyval as u8) + 32)));
         }
-        0x001..=0x01a => {        // Control characters (Ctrl+A=0x001 .. Ctrl+Z=0x01a)
-            return Some(String::from(char::from(keyval as u8 + 0x060)));  // map to a..z
+        0x001..=0x01a => {
+            // Control characters (Ctrl+A=0x001 .. Ctrl+Z=0x01a)
+            return Some(String::from(char::from(keyval as u8 + 0x060))); // map to a..z
         }
-        0x030..=0x039 => {        // GDK_KEY_0..9
+        0x030..=0x039 => {
+            // GDK_KEY_0..9
             return Some(String::from(char::from(keyval as u8)));
         }
         0x02d => "minus",
@@ -358,6 +454,12 @@ pub fn parse_binding_str(s: &str) -> Option<Vec<KeyCombo>> {
     }
 }
 
+impl Default for KeybindingRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeybindingRegistry {
     pub fn new() -> Self {
         Self {
@@ -409,10 +511,14 @@ impl KeybindingRegistry {
             // takes priority, so don't overwrite a SequencePrefix with a Command.
             match self.bindings.get(&combo) {
                 Some(BindingAction::SequencePrefix(_)) => {
-                    eprintln!("warning: keybinding '{}' conflicts with a sequence prefix, single binding will be unreachable", combo_str);
+                    eprintln!(
+                        "warning: keybinding '{}' conflicts with a sequence prefix, single binding will be unreachable",
+                        combo_str
+                    );
                 }
                 _ => {
-                    self.bindings.insert(combo, BindingAction::Command(command.to_string()));
+                    self.bindings
+                        .insert(combo, BindingAction::Command(command.to_string()));
                 }
             }
         } else if combos.len() == 2 {
@@ -421,9 +527,10 @@ impl KeybindingRegistry {
             let second = combos[1].clone();
 
             // Replace any existing single Command on the first key with a SequencePrefix
-            let action = self.bindings.entry(first).or_insert_with(|| {
-                BindingAction::SequencePrefix(std::collections::HashMap::new())
-            });
+            let action = self
+                .bindings
+                .entry(first)
+                .or_insert_with(|| BindingAction::SequencePrefix(std::collections::HashMap::new()));
 
             match action {
                 BindingAction::Command(_) => {
@@ -437,16 +544,32 @@ impl KeybindingRegistry {
                 }
             }
         } else {
-            eprintln!("warning: sequences longer than 2 keys not supported: '{}'", combo_str);
+            eprintln!(
+                "warning: sequences longer than 2 keys not supported: '{}'",
+                combo_str
+            );
         }
     }
 
     /// Look up what a key combo maps to.
-    pub fn lookup(&self, keyval: u32, ctrl: bool, shift: bool, alt: bool, super_: bool) -> LookupResult<'_> {
+    pub fn lookup(
+        &self,
+        keyval: u32,
+        ctrl: bool,
+        shift: bool,
+        alt: bool,
+        super_: bool,
+    ) -> LookupResult<'_> {
         let Some(key) = keyval_to_name(keyval) else {
             return LookupResult::None;
         };
-        let combo = KeyCombo { key, ctrl, shift, alt, super_ };
+        let combo = KeyCombo {
+            key,
+            ctrl,
+            shift,
+            alt,
+            super_,
+        };
         match self.bindings.get(&combo) {
             Some(BindingAction::Command(cmd)) => LookupResult::Command(cmd),
             Some(BindingAction::SequencePrefix(_)) => LookupResult::SequencePrefix,
@@ -456,12 +579,36 @@ impl KeybindingRegistry {
 
     /// Look up the second key of a sequence. Returns the command if the
     /// (first, second) pair is a registered sequence.
-    pub fn lookup_sequence(&self, first_keyval: u32, first_ctrl: bool, first_shift: bool, first_alt: bool, first_super: bool,
-                           second_keyval: u32, second_ctrl: bool, second_shift: bool, second_alt: bool, second_super: bool) -> Option<&str> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn lookup_sequence(
+        &self,
+        first_keyval: u32,
+        first_ctrl: bool,
+        first_shift: bool,
+        first_alt: bool,
+        first_super: bool,
+        second_keyval: u32,
+        second_ctrl: bool,
+        second_shift: bool,
+        second_alt: bool,
+        second_super: bool,
+    ) -> Option<&str> {
         let first_key = keyval_to_name(first_keyval)?;
-        let first = KeyCombo { key: first_key, ctrl: first_ctrl, shift: first_shift, alt: first_alt, super_: first_super };
+        let first = KeyCombo {
+            key: first_key,
+            ctrl: first_ctrl,
+            shift: first_shift,
+            alt: first_alt,
+            super_: first_super,
+        };
         let second_key = keyval_to_name(second_keyval)?;
-        let second = KeyCombo { key: second_key, ctrl: second_ctrl, shift: second_shift, alt: second_alt, super_: second_super };
+        let second = KeyCombo {
+            key: second_key,
+            ctrl: second_ctrl,
+            shift: second_shift,
+            alt: second_alt,
+            super_: second_super,
+        };
 
         if let Some(BindingAction::SequencePrefix(map)) = self.bindings.get(&first) {
             map.get(&second).map(|s| s.as_str())
@@ -471,7 +618,10 @@ impl KeybindingRegistry {
     }
 
     /// Register all keybindings from a config HashMap, overriding defaults.
-    pub fn register_from_config(&mut self, config_bindings: &std::collections::HashMap<String, String>) {
+    pub fn register_from_config(
+        &mut self,
+        config_bindings: &std::collections::HashMap<String, String>,
+    ) {
         for (combo_str, command) in config_bindings {
             self.register_str(combo_str, command);
         }
@@ -540,7 +690,10 @@ mod tests {
 
     #[test]
     fn test_parse_command_arg_with_spaces() {
-        assert_eq!(parse_command(":open path with spaces.md"), ("open", "path with spaces.md"));
+        assert_eq!(
+            parse_command(":open path with spaces.md"),
+            ("open", "path with spaces.md")
+        );
     }
 
     // match_commands tests
@@ -597,7 +750,11 @@ mod tests {
     fn test_match_paths_excludes_non_markdown() {
         let matches = match_paths("src/");
         // src/ has .rs files but no .md files, only subdirectories should appear
-        assert!(matches.iter().all(|m| m.ends_with('/') || is_markdown_file(m)));
+        assert!(
+            matches
+                .iter()
+                .all(|m| m.ends_with('/') || is_markdown_file(m))
+        );
     }
 
     #[test]
@@ -731,7 +888,10 @@ mod tests {
 
     #[test]
     fn test_split_commands_empty_parts() {
-        assert_eq!(split_commands("sidetoc_open;;quicktoc"), vec!["sidetoc_open", "quicktoc"]);
+        assert_eq!(
+            split_commands("sidetoc_open;;quicktoc"),
+            vec!["sidetoc_open", "quicktoc"]
+        );
     }
 
     #[test]
@@ -818,42 +978,71 @@ mod tests {
     fn test_registry_defaults() {
         let reg = KeybindingRegistry::with_defaults();
         // Tab -> quicktoc
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("quicktoc"));
+        assert_eq!(
+            reg.lookup(0xff09, false, false, false, false),
+            LookupResult::Command("quicktoc")
+        );
         // Ctrl+P -> print
-        assert_eq!(reg.lookup(0x070, true, false, false, false), LookupResult::Command("print"));
+        assert_eq!(
+            reg.lookup(0x070, true, false, false, false),
+            LookupResult::Command("print")
+        );
         // j -> scroll_down
-        assert_eq!(reg.lookup(0x06a, false, false, false, false), LookupResult::Command("scroll_down"));
+        assert_eq!(
+            reg.lookup(0x06a, false, false, false, false),
+            LookupResult::Command("scroll_down")
+        );
         // k -> scroll_up
-        assert_eq!(reg.lookup(0x06b, false, false, false, false), LookupResult::Command("scroll_up"));
+        assert_eq!(
+            reg.lookup(0x06b, false, false, false, false),
+            LookupResult::Command("scroll_up")
+        );
         // g -> sequence prefix (for g,g)
-        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(
+            reg.lookup(0x067, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
         // g,g -> scroll_top
         assert_eq!(
-            reg.lookup_sequence(0x067, false, false, false, false, 0x067, false, false, false, false),
+            reg.lookup_sequence(
+                0x067, false, false, false, false, 0x067, false, false, false, false
+            ),
             Some("scroll_top")
         );
         // shift+g -> scroll_bottom
-        assert_eq!(reg.lookup(0x067, false, true, false, false), LookupResult::Command("scroll_bottom"));
+        assert_eq!(
+            reg.lookup(0x067, false, true, false, false),
+            LookupResult::Command("scroll_bottom")
+        );
     }
 
     #[test]
     fn test_registry_lookup_miss() {
         let reg = KeybindingRegistry::with_defaults();
-        assert_eq!(reg.lookup(0x061, false, false, false, false), LookupResult::None); // 'a' not bound
+        assert_eq!(
+            reg.lookup(0x061, false, false, false, false),
+            LookupResult::None
+        ); // 'a' not bound
     }
 
     #[test]
     fn test_registry_override() {
         let mut reg = KeybindingRegistry::with_defaults();
         reg.register_str("tab", "sidetoc_toggle");
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("sidetoc_toggle"));
+        assert_eq!(
+            reg.lookup(0xff09, false, false, false, false),
+            LookupResult::Command("sidetoc_toggle")
+        );
     }
 
     #[test]
     fn test_registry_custom_binding() {
         let mut reg = KeybindingRegistry::new();
         reg.register_str("ctrl+y", "open ~/todo.md");
-        assert_eq!(reg.lookup(0x079, true, false, false, false), LookupResult::Command("open ~/todo.md"));
+        assert_eq!(
+            reg.lookup(0x079, true, false, false, false),
+            LookupResult::Command("open ~/todo.md")
+        );
     }
 
     #[test]
@@ -863,8 +1052,14 @@ mod tests {
         config_bindings.insert("tab".to_string(), "sidetoc_toggle".to_string());
         config_bindings.insert("ctrl+b".to_string(), "quicktoc".to_string());
         reg.register_from_config(&config_bindings);
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("sidetoc_toggle"));
-        assert_eq!(reg.lookup(0x062, true, false, false, false), LookupResult::Command("quicktoc"));
+        assert_eq!(
+            reg.lookup(0xff09, false, false, false, false),
+            LookupResult::Command("sidetoc_toggle")
+        );
+        assert_eq!(
+            reg.lookup(0x062, true, false, false, false),
+            LookupResult::Command("quicktoc")
+        );
     }
 
     // parse_binding_str tests
@@ -907,15 +1102,22 @@ mod tests {
         let mut reg = KeybindingRegistry::new();
         reg.register_str("g,g", "scroll_top");
         // g is a sequence prefix
-        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(
+            reg.lookup(0x067, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
         // g,g -> scroll_top
         assert_eq!(
-            reg.lookup_sequence(0x067, false, false, false, false, 0x067, false, false, false, false),
+            reg.lookup_sequence(
+                0x067, false, false, false, false, 0x067, false, false, false, false
+            ),
             Some("scroll_top")
         );
         // g,k -> None (not registered)
         assert_eq!(
-            reg.lookup_sequence(0x067, false, false, false, false, 0x06b, false, false, false, false),
+            reg.lookup_sequence(
+                0x067, false, false, false, false, 0x06b, false, false, false, false
+            ),
             None
         );
     }
@@ -927,7 +1129,10 @@ mod tests {
         // Now register a sequence starting with g — it should upgrade to SequencePrefix
         reg.register_str("g,g", "scroll_top");
         // g is now a sequence prefix, not a direct command
-        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(
+            reg.lookup(0x067, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
     }
 
     #[test]
@@ -936,9 +1141,15 @@ mod tests {
         reg.register_str("j", "scroll_down");
         reg.register_str("g,g", "scroll_top");
         // j is still a direct command
-        assert_eq!(reg.lookup(0x06a, false, false, false, false), LookupResult::Command("scroll_down"));
+        assert_eq!(
+            reg.lookup(0x06a, false, false, false, false),
+            LookupResult::Command("scroll_down")
+        );
         // g is a sequence prefix
-        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(
+            reg.lookup(0x067, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
     }
 
     #[test]
@@ -948,10 +1159,18 @@ mod tests {
         config.insert("g,g".to_string(), "scroll_top".to_string());
         config.insert("z,z".to_string(), "center_screen".to_string());
         reg.register_from_config(&config);
-        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
-        assert_eq!(reg.lookup(0x07a, false, false, false, false), LookupResult::SequencePrefix);
         assert_eq!(
-            reg.lookup_sequence(0x07a, false, false, false, false, 0x07a, false, false, false, false),
+            reg.lookup(0x067, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
+        assert_eq!(
+            reg.lookup(0x07a, false, false, false, false),
+            LookupResult::SequencePrefix
+        );
+        assert_eq!(
+            reg.lookup_sequence(
+                0x07a, false, false, false, false, 0x07a, false, false, false, false
+            ),
             Some("center_screen")
         );
     }
@@ -967,7 +1186,10 @@ mod tests {
     fn test_match_settings_paragraph() {
         let mut matches = match_settings("paragraph");
         matches.sort();
-        assert_eq!(matches, vec!["paragraph_numbers", "paragraph_numbers_start"]);
+        assert_eq!(
+            matches,
+            vec!["paragraph_numbers", "paragraph_numbers_start"]
+        );
     }
 
     #[test]

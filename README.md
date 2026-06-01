@@ -1,4 +1,4 @@
-Coverage: 46%
+Coverage: 51%
 
 # Markdown Instant Preview - Rust edition
 

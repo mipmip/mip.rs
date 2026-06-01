@@ -1,7 +1,7 @@
-pub mod markdown;
-pub mod config;
 pub mod command;
+pub mod config;
 pub mod history;
+pub mod markdown;
 pub mod server;
 pub mod view;
 
@@ -17,10 +17,10 @@ pub fn is_system_dark() -> bool {
         }
     }
     // Fallback: check GTK_THEME env var for dark variants
-    if let Ok(gtk_theme) = std::env::var("GTK_THEME") {
-        if gtk_theme.to_lowercase().contains("dark") {
-            return true;
-        }
+    if let Ok(gtk_theme) = std::env::var("GTK_THEME")
+        && gtk_theme.to_lowercase().contains("dark")
+    {
+        return true;
     }
     false
 }

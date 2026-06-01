@@ -1,11 +1,11 @@
 use argh::FromArgs;
+use mip::server::RestBro;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use std::env;
 use std::fs;
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::env;
-use std::net::TcpListener;
-use mip::server::RestBro;
 
 /// mip - Markdown In Preview
 #[derive(FromArgs)]
@@ -45,14 +45,14 @@ struct Cli {
 }
 
 fn get_available_port() -> Option<u16> {
-    (8000..9000)
-        .find(|port| port_is_available(*port))
+    (8000..9000).find(|port| port_is_available(*port))
 }
 
 pub(crate) fn port_is_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn watch(
     path_dir: PathBuf,
     path_file: String,
@@ -92,7 +92,14 @@ fn watch(
                 if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(&current_file) {
-                        mip::markdown::to_html(&current_file, &temp_dir, port, show_frontmatter, &theme_class, math);
+                        mip::markdown::to_html(
+                            &current_file,
+                            &temp_dir,
+                            port,
+                            show_frontmatter,
+                            &theme_class,
+                            math,
+                        );
                     }
                 }
             }
@@ -119,11 +126,15 @@ fn main() {
             eprintln!("Back it up first if you want to regenerate.");
             process::exit(1);
         }
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                eprintln!("error: could not create directory {}: {}", parent.display(), e);
-                process::exit(1);
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            eprintln!(
+                "error: could not create directory {}: {}",
+                parent.display(),
+                e
+            );
+            process::exit(1);
         }
         match fs::write(&path, mip::config::default_config_template()) {
             Ok(_) => {
@@ -156,7 +167,10 @@ fn main() {
 
     let theme = if let Some(ref t) = cli.theme {
         if !["system", "light", "dark"].contains(&t.as_str()) {
-            eprintln!("error: invalid theme '{}'. Must be system, light, or dark.", t);
+            eprintln!(
+                "error: invalid theme '{}'. Must be system, light, or dark.",
+                t
+            );
             process::exit(1);
         }
         t.as_str()
@@ -169,12 +183,20 @@ fn main() {
         "dark" => "dark",
         _ => {
             // Detect system dark mode preference
-            if mip::is_system_dark() { "dark" } else { "light" }
+            if mip::is_system_dark() {
+                "dark"
+            } else {
+                "light"
+            }
         }
     };
 
     // CLI --frontmatter overrides config (flag presence means true)
-    let show_frontmatter = if cli.frontmatter { true } else { cfg.frontmatter() };
+    let show_frontmatter = if cli.frontmatter {
+        true
+    } else {
+        cfg.frontmatter()
+    };
 
     // Resolve runcmd: CLI overrides config
     let runcmd = cli.runcmd.as_deref().or_else(|| cfg.runcmd());
@@ -194,8 +216,7 @@ fn main() {
         }
     };
     // Canonicalize so the symlink target is absolute
-    let path_dir_for_server = fs::canonicalize(&path_dir_for_server)
-        .unwrap_or(path_dir_for_server);
+    let path_dir_for_server = fs::canonicalize(&path_dir_for_server).unwrap_or(path_dir_for_server);
 
     let temp_dir: PathBuf = env::temp_dir().join(format!("mip-{}", process::id()));
     fs::create_dir_all(&temp_dir).expect("Unable to create temp directory");
@@ -226,7 +247,14 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string, math);
+        mip::markdown::to_html(
+            &path_file,
+            &temp_dir,
+            available_port,
+            show_frontmatter,
+            &theme_class_string,
+            math,
+        );
 
         // Channel for :open to send new file paths to the watcher
         let (new_file_tx, new_file_rx) = std::sync::mpsc::channel::<PathBuf>();
@@ -262,9 +290,23 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size(), new_file_tx, math);
-    }
-    else{
+        mip::view::window(
+            available_port,
+            temp_dir,
+            show_frontmatter,
+            theme,
+            &path_file_for_view,
+            runcmd_string.as_deref(),
+            sidetoc_width,
+            &sidetoc_position,
+            keybinding_registry,
+            paragraph_numbers,
+            paragraph_numbers_start,
+            cfg.history_size(),
+            new_file_tx,
+            math,
+        );
+    } else {
         panic!("E2");
     }
 }

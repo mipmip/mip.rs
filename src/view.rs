@@ -1,13 +1,13 @@
-use std::path::PathBuf;
 use std::net::TcpStream;
+use std::path::PathBuf;
 
-use gtk4::prelude::*;
-use gtk4::prelude::TreeViewExt;
-use gtk4::glib::translate::IntoGlib;
-use gtk4::{Application, ApplicationWindow, ScrolledWindow, Paned, Orientation, Stack};
 use gtk4::glib;
+use gtk4::glib::translate::IntoGlib;
+use gtk4::prelude::TreeViewExt;
+use gtk4::prelude::*;
+use gtk4::{Application, ApplicationWindow, Orientation, Paned, ScrolledWindow, Stack};
 use webkit6::prelude::*;
-use webkit6::{WebView, NavigationPolicyDecision, PolicyDecisionType, PrintOperation};
+use webkit6::{NavigationPolicyDecision, PolicyDecisionType, PrintOperation, WebView};
 
 use crate::markdown::TocEntry;
 
@@ -20,19 +20,22 @@ pub(crate) fn strip_seed_scripts(html: &str) -> String {
     let mut result = html.to_string();
     // Remove the seedUrl variable script
     if let Some(start) = result.find("<script>var seedUrl=")
-        && let Some(end) = result[start..].find("</script>") {
-            result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-        }
+        && let Some(end) = result[start..].find("</script>")
+    {
+        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
+    }
     // Remove the polling/reload script
     if let Some(start) = result.find("<script>document.addEventListener(\"keydown\"")
-        && let Some(end) = result[start..].find("</script>") {
-            result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-        }
+        && let Some(end) = result[start..].find("</script>")
+    {
+        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
+    }
     // Remove the header link script that references seedUrl
     if let Some(start) = result.find("<script>document.getElementById(\"header\")")
-        && let Some(end) = result[start..].find("</script>") {
-            result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-        }
+        && let Some(end) = result[start..].find("</script>")
+    {
+        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
+    }
     result
 }
 
@@ -75,11 +78,14 @@ pub fn populate_toc(store: &gtk4::TreeStore, entries: &[TocEntry]) {
 
         let parent_iter = parent_stack.last().map(|(_, iter)| iter);
         let iter = store.append(parent_iter);
-        store.set(&iter, &[
-            (COL_TITLE, &entry.title),
-            (COL_ANCHOR, &entry.anchor_id),
-            (COL_LEVEL, &(entry.level as u32)),
-        ]);
+        store.set(
+            &iter,
+            &[
+                (COL_TITLE, &entry.title),
+                (COL_ANCHOR, &entry.anchor_id),
+                (COL_LEVEL, &(entry.level as u32)),
+            ],
+        );
         parent_stack.push((entry.level, iter));
     }
 }
@@ -143,50 +149,67 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
         "q" | "close" => {
             ctx.app.quit();
         }
-        "open" | "o" => {
-            if !arg.is_empty() {
-                let path = crate::command::expand_tilde(arg);
-                let path_ref = std::path::Path::new(&path);
-                if path_ref.exists() {
-                    let new_infile = path_ref.canonicalize()
-                        .unwrap_or_else(|_| path_ref.to_path_buf())
-                        .to_string_lossy()
-                        .to_string();
-                    let new_filename = path_ref.file_name()
-                        .map(|f| f.to_string_lossy().to_string())
-                        .unwrap_or_else(|| "MiP".to_string());
+        "open" | "o" if !arg.is_empty() => {
+            let path = crate::command::expand_tilde(arg);
+            let path_ref = std::path::Path::new(&path);
+            if path_ref.exists() {
+                let new_infile = path_ref
+                    .canonicalize()
+                    .unwrap_or_else(|_| path_ref.to_path_buf())
+                    .to_string_lossy()
+                    .to_string();
+                let new_filename = path_ref
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "MiP".to_string());
 
-                    // Update infile and filename in settings
-                    *ctx.settings.infile.borrow_mut() = new_infile.clone();
-                    *ctx.settings.filename.borrow_mut() = new_filename.clone();
+                // Update infile and filename in settings
+                *ctx.settings.infile.borrow_mut() = new_infile.clone();
+                *ctx.settings.filename.borrow_mut() = new_filename.clone();
 
-                    // Update docroot symlink for server
-                    if let Some(parent) = path_ref.canonicalize().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())) {
-                        let docroot = ctx.temp_dir.join("docroot");
-                        let _ = std::fs::remove_file(&docroot);
-                        let _ = std::os::unix::fs::symlink(&parent, &docroot);
-                    }
-
-                    // Send new path to watcher thread
-                    let _ = ctx.watcher_tx.send(PathBuf::from(&new_infile));
-
-                    // Re-render immediately
-                    let sf = ctx.settings.frontmatter.get();
-                    let theme_str = ctx.settings.theme.borrow().clone();
-                    let theme_class = match theme_str.as_str() {
-                        "light" => "light",
-                        "dark" => "dark",
-                        _ => if crate::is_system_dark() { "dark" } else { "light" },
-                    };
-                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class, ctx.settings.math.get());
-
-                    // Update window title
-                    let window_title = format!("{} - MiP", new_filename);
-                    ctx.window.set_title(Some(&window_title));
-
-                    // Force re-render in poll loop
-                    ctx.settings.force_render.set(true);
+                // Update docroot symlink for server
+                if let Some(parent) = path_ref
+                    .canonicalize()
+                    .ok()
+                    .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+                {
+                    let docroot = ctx.temp_dir.join("docroot");
+                    let _ = std::fs::remove_file(&docroot);
+                    let _ = std::os::unix::fs::symlink(&parent, &docroot);
                 }
+
+                // Send new path to watcher thread
+                let _ = ctx.watcher_tx.send(PathBuf::from(&new_infile));
+
+                // Re-render immediately
+                let sf = ctx.settings.frontmatter.get();
+                let theme_str = ctx.settings.theme.borrow().clone();
+                let theme_class = match theme_str.as_str() {
+                    "light" => "light",
+                    "dark" => "dark",
+                    _ => {
+                        if crate::is_system_dark() {
+                            "dark"
+                        } else {
+                            "light"
+                        }
+                    }
+                };
+                crate::markdown::to_html(
+                    &new_infile,
+                    &ctx.temp_dir,
+                    ctx.port,
+                    sf,
+                    theme_class,
+                    ctx.settings.math.get(),
+                );
+
+                // Update window title
+                let window_title = format!("{} - MiP", new_filename);
+                ctx.window.set_title(Some(&window_title));
+
+                // Force re-render in poll loop
+                ctx.settings.force_render.set(true);
             }
         }
         "sidetoc_open" => {
@@ -202,10 +225,8 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
         "document_focus" => {
             ctx.webview.grab_focus();
         }
-        "sidetoc_focus" => {
-            if ctx.sidetoc_open.get() {
-                ctx.sidetoc_treeview.grab_focus();
-            }
+        "sidetoc_focus" if ctx.sidetoc_open.get() => {
+            ctx.sidetoc_treeview.grab_focus();
         }
         "sidetoc_close" => {
             if ctx.sidetoc_right {
@@ -252,7 +273,13 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                     match value {
                         "true" | "1" | "on" => ctx.settings.frontmatter.set(true),
                         "false" | "0" | "off" => ctx.settings.frontmatter.set(false),
-                        _ => { eprintln!("warning: invalid value '{}' for frontmatter (expected true/false)", value); return; }
+                        _ => {
+                            eprintln!(
+                                "warning: invalid value '{}' for frontmatter (expected true/false)",
+                                value
+                            );
+                            return;
+                        }
                     }
                     ctx.settings.force_render.set(true);
                 }
@@ -260,7 +287,13 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                     match value {
                         "true" | "1" | "on" => ctx.settings.paragraph_numbers.set(true),
                         "false" | "0" | "off" => ctx.settings.paragraph_numbers.set(false),
-                        _ => { eprintln!("warning: invalid value '{}' for paragraph_numbers (expected true/false)", value); return; }
+                        _ => {
+                            eprintln!(
+                                "warning: invalid value '{}' for paragraph_numbers (expected true/false)",
+                                value
+                            );
+                            return;
+                        }
                     }
                     ctx.settings.force_render.set(true);
                 }
@@ -269,7 +302,10 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         ctx.settings.paragraph_numbers_start.set(n.clamp(1, 6));
                         ctx.settings.force_render.set(true);
                     } else {
-                        eprintln!("warning: invalid value '{}' for paragraph_numbers_start (expected 1-6)", value);
+                        eprintln!(
+                            "warning: invalid value '{}' for paragraph_numbers_start (expected 1-6)",
+                            value
+                        );
                     }
                 }
                 "theme" => {
@@ -279,13 +315,28 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         let class = match value {
                             "light" => "light",
                             "dark" => "dark",
-                            _ => if crate::is_system_dark() { "dark" } else { "light" },
+                            _ => {
+                                if crate::is_system_dark() {
+                                    "dark"
+                                } else {
+                                    "light"
+                                }
+                            }
                         };
                         let js = format!("document.documentElement.className = '{}';", class);
-                        ctx.webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                        ctx.webview.evaluate_javascript(
+                            &js,
+                            None,
+                            None,
+                            None::<&gtk4::gio::Cancellable>,
+                            |_| {},
+                        );
                         ctx.settings.force_render.set(true);
                     } else {
-                        eprintln!("warning: invalid value '{}' for theme (expected system/light/dark)", value);
+                        eprintln!(
+                            "warning: invalid value '{}' for theme (expected system/light/dark)",
+                            value
+                        );
                     }
                 }
                 _ => {}
@@ -311,28 +362,76 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
             ctx.webview.set_zoom_level(1.0);
         }
         "scroll_down" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, 60)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, 60)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_up" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, -60)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, -60)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_page_down" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, window.innerHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, window.innerHeight)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_page_up" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, -window.innerHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, -window.innerHeight)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_half_down" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, window.innerHeight/2)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, window.innerHeight/2)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_half_up" => {
-            ctx.webview.evaluate_javascript("window.scrollBy(0, -window.innerHeight/2)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollBy(0, -window.innerHeight/2)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_top" => {
-            ctx.webview.evaluate_javascript("window.scrollTo(0, 0)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollTo(0, 0)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_bottom" => {
-            ctx.webview.evaluate_javascript("window.scrollTo(0, document.body.scrollHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+            ctx.webview.evaluate_javascript(
+                "window.scrollTo(0, document.body.scrollHeight)",
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                |_| {},
+            );
         }
         "scroll_next_heading" => {
             ctx.webview.evaluate_javascript(
@@ -396,7 +495,11 @@ fn handle_tab_completion(
                 let new_text = format!(":{}", completion);
                 entry.set_text(&new_text);
                 entry.set_position(new_text.len() as i32);
-                wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                wildmenu.set_markup(&crate::command::wildmenu_markup(
+                    &matches_ref,
+                    index.get(),
+                    10,
+                ));
                 wildmenu.set_visible(true);
             }
         }
@@ -425,15 +528,26 @@ fn handle_tab_completion(
                     let new_text = format!(":set {}", completion);
                     entry.set_text(&new_text);
                     entry.set_position(new_text.len() as i32);
-                    wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                    wildmenu.set_markup(&crate::command::wildmenu_markup(
+                        &matches_ref,
+                        index.get(),
+                        10,
+                    ));
                     wildmenu.set_visible(true);
                 }
             }
         }
     } else {
         // Path completion for open/o commands
-        if let Some(path_arg) = text_stripped.strip_prefix("open ").or_else(|| text_stripped.strip_prefix("o ")) {
-            let cmd_prefix = if text_stripped.starts_with("open ") { ":open " } else { ":o " };
+        if let Some(path_arg) = text_stripped
+            .strip_prefix("open ")
+            .or_else(|| text_stripped.strip_prefix("o "))
+        {
+            let cmd_prefix = if text_stripped.starts_with("open ") {
+                ":open "
+            } else {
+                ":o "
+            };
             let used_tilde = path_arg.starts_with('~');
 
             if matches.borrow().is_empty() {
@@ -455,7 +569,11 @@ fn handle_tab_completion(
                 entry.set_position(new_text.len() as i32);
 
                 if matches_ref.len() > 1 {
-                    wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                    wildmenu.set_markup(&crate::command::wildmenu_markup(
+                        &matches_ref,
+                        index.get(),
+                        10,
+                    ));
                     wildmenu.set_visible(true);
                 } else {
                     wildmenu.set_visible(false);
@@ -466,15 +584,37 @@ fn handle_tab_completion(
 }
 
 fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse: bool) {
-    if len == 0 { return; }
+    if len == 0 {
+        return;
+    }
     if reverse {
-        index.set(if index.get() == 0 { len - 1 } else { index.get() - 1 });
+        index.set(if index.get() == 0 {
+            len - 1
+        } else {
+            index.get() - 1
+        });
     } else {
         index.set((index.get() + 1) % len);
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>, math: bool) {
+#[allow(clippy::too_many_arguments)]
+pub fn window(
+    port: u16,
+    temp_dir: PathBuf,
+    show_frontmatter: bool,
+    theme_mode: &str,
+    infile: &str,
+    runcmd: Option<&str>,
+    sidetoc_width: u32,
+    sidetoc_position: &str,
+    keybinding_registry: crate::command::KeybindingRegistry,
+    paragraph_numbers: bool,
+    paragraph_numbers_start: u8,
+    history_size: usize,
+    watcher_tx: std::sync::mpsc::Sender<PathBuf>,
+    math: bool,
+) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
@@ -507,11 +647,11 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         // Open external links in default browser
         let local_origin = format!("http://localhost:{}", port);
         webview.connect_decide_policy(move |_, decision, decision_type| {
-            if matches!(decision_type, PolicyDecisionType::NavigationAction | PolicyDecisionType::NewWindowAction) {
-                if let Some(nav_decision) = decision.downcast_ref::<NavigationPolicyDecision>() {
-                    if let Some(action) = nav_decision.navigation_action() {
-                        if let Some(request) = action.request() {
-                            if let Some(uri) = request.uri() {
+            if matches!(decision_type, PolicyDecisionType::NavigationAction | PolicyDecisionType::NewWindowAction)
+                && let Some(nav_decision) = decision.downcast_ref::<NavigationPolicyDecision>()
+                    && let Some(action) = nav_decision.navigation_action()
+                        && let Some(request) = action.request()
+                            && let Some(uri) = request.uri() {
                                 let uri_str = uri.as_str();
                                 if !uri_str.starts_with(&local_origin) && !uri_str.starts_with("about:") {
                                     let _ = std::process::Command::new("xdg-open")
@@ -521,10 +661,6 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                                     return true;
                                 }
                             }
-                        }
-                    }
-                }
-            }
             false
         });
 
@@ -697,6 +833,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             let cmd_entry_for_keys = cmd_entry.clone();
             let registry = keybinding_registry.clone();
             let ctx_for_keys = cmd_ctx.clone();
+            #[allow(clippy::type_complexity)]
             let pending_key: std::rc::Rc<std::cell::Cell<Option<(u32, bool, bool, bool, bool, std::time::Instant)>>> =
                 std::rc::Rc::new(std::cell::Cell::new(None));
             let pending_for_cmd = pending_key.clone();
@@ -710,12 +847,11 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 }
 
                 // Skip when a TreeView is focused (let TreeView j/k handlers work)
-                if let Some(focus_widget) = gtk4::prelude::GtkWindowExt::focus(&ctx_for_keys.window) {
-                    if focus_widget.type_().name() == "GtkTreeView" {
+                if let Some(focus_widget) = gtk4::prelude::GtkWindowExt::focus(&ctx_for_keys.window)
+                    && focus_widget.type_().name() == "GtkTreeView" {
                         pending_key.set(None);
                         return glib::Propagation::Proceed;
                     }
-                }
 
                 // `:` always opens command bar (not rebindable)
                 if keyval == gtk4::gdk::Key::colon {
@@ -740,8 +876,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 // Check pending key state for sequences
                 if let Some((prev_kv, prev_ctrl, prev_shift, prev_alt, prev_super, instant)) = pending_key.get() {
                     pending_key.set(None);
-                    if instant.elapsed() < std::time::Duration::from_millis(500) {
-                        if let Some(command) = registry.lookup_sequence(
+                    if instant.elapsed() < std::time::Duration::from_millis(500)
+                        && let Some(command) = registry.lookup_sequence(
                             prev_kv, prev_ctrl, prev_shift, prev_alt, prev_super,
                             kv, ctrl, shift, alt, super_,
                         ) {
@@ -749,7 +885,6 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                             execute_commands(&command, &ctx_for_keys);
                             return glib::Propagation::Stop;
                         }
-                    }
                     // Sequence didn't match or timed out — fall through to process current key fresh
                 }
 
@@ -887,11 +1022,10 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                             if len > 0 {
                                 hist_index_clone.set(Some(len - 1));
                             }
-                        } else if let Some(idx) = hist_index_clone.get() {
-                            if idx > 0 {
+                        } else if let Some(idx) = hist_index_clone.get()
+                            && idx > 0 {
                                 hist_index_clone.set(Some(idx - 1));
                             }
-                        }
                         // Show entry at current index
                         if let Some(idx) = hist_index_clone.get() {
                             let matches = hist_matches_clone.borrow();
@@ -1199,7 +1333,9 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
     });
 
     app.connect_shutdown(move |_| {
-        history_for_shutdown.borrow().save(&history_path_for_shutdown);
+        history_for_shutdown
+            .borrow()
+            .save(&history_path_for_shutdown);
         let _ = std::fs::remove_dir_all(&temp_dir_cleanup);
     });
 

@@ -13,6 +13,11 @@ build:
 	make compthemes
 	cargo build --release
 
+lint:
+	cargo fmt --check && cargo clippy -- -D warnings
+
+check: lint test
+
 test:
 	cargo test
 

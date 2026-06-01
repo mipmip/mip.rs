@@ -26,10 +26,7 @@ impl Config {
 
     /// Load config from a TOML string. Returns defaults if malformed.
     pub fn load_from_str(content: &str) -> Config {
-        match toml::from_str::<Config>(content) {
-            Ok(config) => config,
-            Err(_) => Config::default(),
-        }
+        toml::from_str::<Config>(content).unwrap_or_default()
     }
 
     /// Load config from an explicit path. Returns defaults if the file
@@ -42,23 +39,29 @@ impl Config {
 
         match toml::from_str::<Config>(&content) {
             Ok(config) => {
-                if let Some(ref theme) = config.theme {
-                    if !["system", "light", "dark"].contains(&theme.as_str()) {
-                        eprintln!("warning: invalid theme '{}' in config, using default", theme);
-                        return Config {
-                            theme: None,
-                            ..config
-                        };
-                    }
+                if let Some(ref theme) = config.theme
+                    && !["system", "light", "dark"].contains(&theme.as_str())
+                {
+                    eprintln!(
+                        "warning: invalid theme '{}' in config, using default",
+                        theme
+                    );
+                    return Config {
+                        theme: None,
+                        ..config
+                    };
                 }
-                if let Some(ref pos) = config.sidetoc_position {
-                    if !["left", "right"].contains(&pos.as_str()) {
-                        eprintln!("warning: invalid sidetoc_position '{}' in config, using default", pos);
-                        return Config {
-                            sidetoc_position: None,
-                            ..config
-                        };
-                    }
+                if let Some(ref pos) = config.sidetoc_position
+                    && !["left", "right"].contains(&pos.as_str())
+                {
+                    eprintln!(
+                        "warning: invalid sidetoc_position '{}' in config, using default",
+                        pos
+                    );
+                    return Config {
+                        sidetoc_position: None,
+                        ..config
+                    };
                 }
                 config
             }

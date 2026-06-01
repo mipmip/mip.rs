@@ -1,4 +1,4 @@
-use mip::markdown::{md_to_html_body, md_to_html_body_with_toc, build_html};
+use mip::markdown::{build_html, md_to_html_body, md_to_html_body_with_toc};
 
 #[test]
 fn test_md_to_html_body_headings() {
@@ -64,7 +64,15 @@ fn test_md_to_html_body_frontmatter_shown() {
 fn test_build_html_replaces_placeholders() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}<script>var seedUrl=\"#{SEEDURL}\";var initialSeed=\"#{INITIALSEED}\";</script></body></html>";
     let md = "# Hello";
-    let result = build_html(md, template, "abc1234", "http://localhost:8000/.temp.seed", false, "dark", false);
+    let result = build_html(
+        md,
+        template,
+        "abc1234",
+        "http://localhost:8000/.temp.seed",
+        false,
+        "dark",
+        false,
+    );
 
     assert!(result.contains("<h1 id=\"hello\">Hello</h1>"));
     assert!(!result.contains("#{BODY}"));

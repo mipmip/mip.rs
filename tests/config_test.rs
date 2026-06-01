@@ -1,5 +1,5 @@
-use std::io::Write;
 use mip::config::Config;
+use std::io::Write;
 
 fn write_temp_config(content: &str) -> tempfile::NamedTempFile {
     let mut file = tempfile::NamedTempFile::new().unwrap();
@@ -26,7 +26,9 @@ fn test_load_from_valid_config_light_theme() {
 
 #[test]
 fn test_load_from_missing_file() {
-    let cfg = Config::load_from(std::path::Path::new("/tmp/nonexistent-miprs-config-xyz.toml"));
+    let cfg = Config::load_from(std::path::Path::new(
+        "/tmp/nonexistent-miprs-config-xyz.toml",
+    ));
     assert_eq!(cfg.theme(), "system");
     assert!(!cfg.frontmatter());
 }
@@ -129,7 +131,11 @@ fn test_default_config_template_contains_all_settings() {
 fn test_default_config_template_is_valid_toml() {
     let template = mip::config::default_config_template();
     let result: Result<toml::Value, _> = toml::from_str(template);
-    assert!(result.is_ok(), "Template is not valid TOML: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Template is not valid TOML: {:?}",
+        result.err()
+    );
 }
 
 #[test]

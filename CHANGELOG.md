@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- add `make lint` (cargo fmt --check + cargo clippy -D warnings) and `make check` (lint + test) targets
+- fix all clippy warnings across codebase (collapsible_if, manual_strip, redundant_closure, while_let_loop, etc.)
+- apply cargo fmt to fix formatting drift
 - add vim-style navigation: j/k scroll, Ctrl+f/b page scroll, Ctrl+d/u half-page, g,g/shift+G top/bottom, n/N heading jump
 - add key sequence support in keybinding system (comma-separated sequences like `g,g` with 500ms timeout)
 - add desktop icon: SVG icon in taskbar, `.desktop` file for app launchers, Nix packaging installs icon and desktop entry

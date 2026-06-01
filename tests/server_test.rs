@@ -94,7 +94,14 @@ async fn test_route_katex_js() {
         .await;
 
     assert_eq!(resp.status(), 200);
-    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("javascript"));
+    assert!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("javascript")
+    );
     let body = String::from_utf8_lossy(resp.body());
     assert!(body.len() > 1000); // katex.min.js is ~270KB
 }
@@ -114,7 +121,14 @@ async fn test_route_katex_css() {
         .await;
 
     assert_eq!(resp.status(), 200);
-    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("css"));
+    assert!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("css")
+    );
 }
 
 #[tokio::test]
@@ -132,5 +146,12 @@ async fn test_route_katex_font() {
         .await;
 
     assert_eq!(resp.status(), 200);
-    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("woff2"));
+    assert!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("woff2")
+    );
 }
