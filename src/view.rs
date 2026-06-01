@@ -120,6 +120,7 @@ pub struct RuntimeSettings {
     pub infile: std::cell::RefCell<String>,
     pub filename: std::cell::RefCell<String>,
     pub math: std::cell::Cell<bool>,
+    pub mermaid: std::cell::Cell<bool>,
 }
 
 struct CommandContext {
@@ -178,7 +179,7 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         "dark" => "dark",
                         _ => if crate::is_system_dark() { "dark" } else { "light" },
                     };
-                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class, ctx.settings.math.get());
+                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class, ctx.settings.math.get(), ctx.settings.mermaid.get());
 
                     // Update window title
                     let window_title = format!("{} - MiP", new_filename);
@@ -474,7 +475,7 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>, math: bool) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>, math: bool, mermaid: bool) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
@@ -629,6 +630,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 infile: std::cell::RefCell::new(infile_path.clone()),
                 filename: std::cell::RefCell::new(filename),
                 math: std::cell::Cell::new(math),
+                mermaid: std::cell::Cell::new(mermaid),
             },
             watcher_tx: watcher_tx.clone(),
             temp_dir: temp_dir.clone(),
@@ -1129,8 +1131,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         *was_dark = now_dark;
                         let class = if now_dark { "dark" } else { "light" };
                         let js = format!(
-                            "document.documentElement.className = '{}';",
-                            class
+                            "document.documentElement.className = '{}';if(typeof mermaid!=='undefined'){{mermaid.initialize({{startOnLoad:false,theme:'{}'==='dark'?'dark':'default'}});if(typeof renderMermaid==='function')renderMermaid();}}",
+                            class, class
                         );
                         webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
                     }
@@ -1178,7 +1180,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                                 .replace('`', "\\`")
                                 .replace("${", "\\${");
                             let js = format!(
-                                "document.querySelector('.section').innerHTML = `{}`;if(typeof renderMath==='function')renderMath();",
+                                "document.querySelector('.section').innerHTML = `{}`;if(typeof renderMath==='function')renderMath();if(typeof renderMermaid==='function')renderMermaid();",
                                 escaped
                             );
                             webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});

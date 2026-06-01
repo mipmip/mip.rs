@@ -4,6 +4,8 @@ title: Mermaid Diagram Examples
 
 # Mermaid Diagrams in Markdown
 
+
+
 ## Flowchart
 
 ```mermaid

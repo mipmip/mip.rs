@@ -5,6 +5,10 @@ use warp::Filter;
 #[folder = "asset/katex"]
 struct KatexAsset;
 
+#[derive(Embed)]
+#[folder = "asset/mermaid"]
+struct MermaidAsset;
+
 fn mime_from_path(path: &str) -> &'static str {
     if path.ends_with(".js") {
         "application/javascript"
@@ -56,9 +60,30 @@ impl RestBro {
                 }
             });
 
+        let mermaid = warp::path("mermaid")
+            .and(warp::path::tail())
+            .and_then(|tail: warp::path::Tail| async move {
+                let path = tail.as_str();
+                match MermaidAsset::get(path) {
+                    Some(content) => {
+                        let mime = mime_from_path(path);
+                        Ok(warp::reply::with_header(
+                            warp::reply::with_header(
+                                content.data.to_vec(),
+                                "content-type",
+                                mime,
+                            ),
+                            "cache-control",
+                            "public, max-age=31536000",
+                        ))
+                    }
+                    None => Err(warp::reject::not_found()),
+                }
+            });
+
         let assets = warp::fs::dir(path_dir);
 
-        temp_html.or(temp_seed).or(katex).or(assets)
+        temp_html.or(temp_seed).or(katex).or(mermaid).or(assets)
     }
 
     pub async fn run_bro(path_dir: String, temp_dir: String, port: u16) {
