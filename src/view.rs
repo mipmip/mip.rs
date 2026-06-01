@@ -36,6 +36,57 @@ pub(crate) fn strip_seed_scripts(html: &str) -> String {
     result
 }
 
+/// Post-process captured DOM HTML for standalone export.
+/// Strips all script tags, localhost link tags, and the header div.
+/// Ensures DOCTYPE is present at the top.
+fn post_process_export(html: &str) -> String {
+    let mut result = String::with_capacity(html.len() + 20);
+
+    // Ensure DOCTYPE is present
+    if !html.trim_start().starts_with("<!DOCTYPE") && !html.trim_start().starts_with("<!doctype") {
+        result.push_str("<!DOCTYPE html>\n");
+    }
+
+    // Process the HTML character by character to strip unwanted elements
+    let bytes = html.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        // Check for tags we want to strip
+        if bytes[i] == b'<' {
+            // Strip <script...>...</script>
+            if html[i..].starts_with("<script") {
+                if let Some(end) = html[i..].find("</script>") {
+                    i += end + 9; // skip past </script>
+                    continue;
+                }
+            }
+            // Strip <link ...> referencing localhost
+            if html[i..].starts_with("<link ") || html[i..].starts_with("<link\n") || html[i..].starts_with("<link\t") {
+                // Find the end of this tag
+                if let Some(end) = html[i..].find('>') {
+                    let tag = &html[i..i + end + 1];
+                    if tag.contains("localhost") || tag.contains("127.0.0.1") {
+                        i += end + 1;
+                        continue;
+                    }
+                }
+            }
+            // Strip <div id="header">...</div>
+            if html[i..].starts_with("<div id=\"header\"") {
+                if let Some(end) = html[i..].find("</div>") {
+                    i += end + 6; // skip past </div>
+                    continue;
+                }
+            }
+        }
+        result.push(html.as_bytes()[i] as char);
+        i += 1;
+    }
+
+    result
+}
+
 fn wait_for_server(port: u16) {
     for _ in 0..50 {
         if TcpStream::connect(("127.0.0.1", port)).is_ok() {
@@ -238,6 +289,43 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
             } else {
                 ctx.paned.set_position((pos - SIDETOC_WIDTH_STEP).max(0));
             }
+        }
+        "export_html" => {
+            if arg.is_empty() {
+                eprintln!("warning: export_html requires a file path");
+                return;
+            }
+            let path = crate::command::expand_tilde(arg);
+            let path_clone = path.clone();
+            ctx.webview.evaluate_javascript(
+                "document.documentElement.outerHTML",
+                None, None, None::<&gtk4::gio::Cancellable>,
+                move |result| {
+                    match result {
+                        Ok(value) => {
+                            let html = value.to_string();
+                            if html.is_empty() {
+                                eprintln!("warning: export_html got empty DOM result, not writing file");
+                                return;
+                            }
+                            let processed = post_process_export(&html);
+                            let out = std::path::Path::new(&path_clone);
+                            if let Some(parent) = out.parent() {
+                                if let Err(e) = std::fs::create_dir_all(parent) {
+                                    eprintln!("warning: export_html could not create directories: {}", e);
+                                    return;
+                                }
+                            }
+                            if let Err(e) = std::fs::write(out, processed) {
+                                eprintln!("warning: export_html failed to write file: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("warning: export_html JS evaluation error: {}", e);
+                        }
+                    }
+                },
+            );
         }
         "print" => {
             let print_op = PrintOperation::new(&ctx.webview);
@@ -1258,4 +1346,82 @@ mod tests {
     // verified indirectly through md_to_html_body_with_toc tests in
     // markdown.rs (TocEntry extraction with hierarchy/skipped levels)
     // and through manual verification (task group 8).
+
+    // --- post_process_export tests ---
+
+    #[test]
+    fn test_post_process_strips_scripts() {
+        let html = r#"<!DOCTYPE html><html><head><script>var x=1;</script></head><body><p>Hello</p><script src="bridge.js"></script></body></html>"#;
+        let result = post_process_export(html);
+        assert!(!result.contains("<script"));
+        assert!(!result.contains("</script>"));
+        assert!(result.contains("<p>Hello</p>"));
+    }
+
+    #[test]
+    fn test_post_process_strips_localhost_links() {
+        let html = r#"<!DOCTYPE html><html><head><link rel="stylesheet" href="http://localhost:8000/katex/katex.min.css"><style>body{}</style></head><body></body></html>"#;
+        let result = post_process_export(html);
+        assert!(!result.contains("localhost"));
+        assert!(result.contains("<style>body{}</style>"));
+    }
+
+    #[test]
+    fn test_post_process_strips_header_div() {
+        let html = r#"<!DOCTYPE html><html><body><div id="header"><a href="http://localhost:8000/">file.md</a></div><div id="content">Hello</div></body></html>"#;
+        let result = post_process_export(html);
+        assert!(!result.contains(r#"id="header""#));
+        assert!(result.contains(r#"id="content"#));
+    }
+
+    #[test]
+    fn test_post_process_preserves_content() {
+        let html = r#"<!DOCTYPE html><html><head><style>.katex{color:red}</style></head><body><h1 id="title">Title</h1><p>Content here</p></body></html>"#;
+        let result = post_process_export(html);
+        assert!(result.contains("<h1 id=\"title\">Title</h1>"));
+        assert!(result.contains("<p>Content here</p>"));
+        assert!(result.contains(".katex{color:red}"));
+    }
+
+    #[test]
+    fn test_post_process_ensures_doctype() {
+        let html = r#"<html><body><p>No doctype</p></body></html>"#;
+        let result = post_process_export(html);
+        assert!(result.starts_with("<!DOCTYPE html>"));
+        assert!(result.contains("<p>No doctype</p>"));
+    }
+
+    #[test]
+    fn test_post_process_preserves_existing_doctype() {
+        let html = r#"<!DOCTYPE html><html><body><p>Has doctype</p></body></html>"#;
+        let result = post_process_export(html);
+        // Should not have double DOCTYPE
+        assert_eq!(result.matches("<!DOCTYPE").count(), 1);
+    }
+
+    #[test]
+    fn test_post_process_passthrough_no_scripts_links() {
+        let html = r#"<!DOCTYPE html><html><head><style>h1{}</style></head><body><p>Clean</p></body></html>"#;
+        let result = post_process_export(html);
+        assert_eq!(result, html);
+    }
+
+    #[test]
+    fn test_post_process_preserves_inline_svgs() {
+        let html = r#"<!DOCTYPE html><html><body><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="red"/></svg></body></html>"#;
+        let result = post_process_export(html);
+        assert!(result.contains("<svg"));
+        assert!(result.contains("<rect"));
+        assert!(result.contains("</svg>"));
+    }
+
+    #[test]
+    fn test_post_process_preserves_katex_math_spans() {
+        let html = r#"<!DOCTYPE html><html><body><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi></math></span><span class="katex-html"><span class="base"><span class="mord mathnormal">x</span></span></span></span></body></html>"#;
+        let result = post_process_export(html);
+        assert!(result.contains("class=\"katex\""));
+        assert!(result.contains("katex-mathml"));
+        assert!(result.contains("katex-html"));
+        assert!(result.contains("<mi>x</mi>"));
+    }
 }
