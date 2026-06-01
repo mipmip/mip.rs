@@ -396,26 +396,28 @@ pub fn build_html(
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
+    custom_css: &str,
 ) -> String {
     let html_body = md_to_html_body(markdown_input, show_frontmatter);
     let mut result = template
         .replace("#{BODY}", &html_body)
         .replace("#{INITIALSEED}", seed)
         .replace("#{SEEDURL}", seed_url)
-        .replace("#{THEME_CLASS}", theme_class);
+        .replace("#{THEME_CLASS}", theme_class)
+        .replace("#{CUSTOM_CSS}", custom_css);
     if math {
         result = result.replace("</head>", &format!("{}\n</head>", MATH_SCRIPTS));
     }
     result
 }
 
-pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool){
+pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool, custom_css: &str){
 
     let markdown_input = fs::read_to_string(infile);
-    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port, show_frontmatter, theme_class, math) };
+    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port, show_frontmatter, theme_class, math, custom_css) };
 }
 
-fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool){
+fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool, custom_css: &str){
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
 
     let seed: String = rand::rng()
@@ -428,7 +430,7 @@ fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_f
     let index_html_str = std::str::from_utf8(index_html.data.as_ref());
     match index_html_str {
         Ok(template) => {
-            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class, math);
+            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class, math, custom_css);
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     eprintln!("warning: could not write seed file: {}", e);

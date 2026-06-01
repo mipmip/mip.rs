@@ -162,3 +162,42 @@ fn test_load_from_math_missing_defaults_to_true() {
     let cfg = Config::load_from(file.path());
     assert!(cfg.math());
 }
+
+// Custom styles tests
+
+#[test]
+fn test_load_from_style_setting() {
+    let file = write_temp_config("style = \"academic\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.style(), Some("academic"));
+}
+
+#[test]
+fn test_load_from_style_missing() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.style(), None);
+}
+
+#[test]
+fn test_style_css_path_returns_correct_path() {
+    let path = mip::config::style_css_path("academic");
+    let path_str = path.to_string_lossy();
+    assert!(path_str.ends_with("styles/academic/style.css"));
+    assert!(path_str.contains("miprs"));
+}
+
+#[test]
+fn test_default_style_css_is_nonempty() {
+    let css = mip::config::default_style_css();
+    assert!(!css.is_empty());
+    assert!(css.contains("/*"));  // has comments
+    assert!(css.contains("--bg"));  // documents CSS variables
+}
+
+#[test]
+fn test_default_config_template_contains_style_docs() {
+    let template = mip::config::default_config_template();
+    assert!(template.contains("style"));
+    assert!(template.contains("initstyle"));
+}

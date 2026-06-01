@@ -85,3 +85,10 @@ The config file SHALL accept a `paragraph_numbers_start` key with integer value 
 #### Scenario: Custom start level
 - **WHEN** the config file contains `paragraph_numbers_start = 2`
 - **THEN** numbering SHALL start from H2 headings
+
+### Requirement: style config setting
+The config file SHALL accept a `style` key with a style name string.
+
+#### Scenario: Style in config
+- **WHEN** the config contains `style = "academic"`
+- **THEN** the system SHALL load CSS from `~/.config/miprs/styles/academic/style.css`

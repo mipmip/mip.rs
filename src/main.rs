@@ -42,6 +42,10 @@ struct Cli {
     /// disable math rendering
     #[argh(switch)]
     no_math: bool,
+
+    /// create a new custom style directory with default CSS
+    #[argh(option)]
+    initstyle: Option<String>,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -62,6 +66,7 @@ fn watch(
     theme_class: String,
     new_file_rx: std::sync::mpsc::Receiver<PathBuf>,
     math: bool,
+    custom_css: String,
 ) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -92,7 +97,7 @@ fn watch(
                 if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(&current_file) {
-                        mip::markdown::to_html(&current_file, &temp_dir, port, show_frontmatter, &theme_class, math);
+                        mip::markdown::to_html(&current_file, &temp_dir, port, show_frontmatter, &theme_class, math, &custom_css);
                     }
                 }
             }
@@ -132,6 +137,32 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("error: could not write config file: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    if let Some(ref style_name) = cli.initstyle {
+        let style_dir = mip::config::styles_dir().join(style_name);
+        if style_dir.exists() {
+            eprintln!("Style directory already exists at {}", style_dir.display());
+            eprintln!("Remove it first if you want to recreate.");
+            process::exit(1);
+        }
+        if let Err(e) = fs::create_dir_all(&style_dir) {
+            eprintln!("error: could not create directory {}: {}", style_dir.display(), e);
+            process::exit(1);
+        }
+        let css_path = style_dir.join("style.css");
+        match fs::write(&css_path, mip::config::default_style_css()) {
+            Ok(_) => {
+                println!("Style created at {}", css_path.display());
+                println!("Add this to your config to use it:");
+                println!("  style = \"{}\"", style_name);
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("error: could not write style file: {}", e);
                 process::exit(1);
             }
         }
@@ -182,6 +213,21 @@ fn main() {
     // CLI --no-math overrides config (flag presence means false)
     let math = if cli.no_math { false } else { cfg.math() };
 
+    // Load custom CSS from style setting
+    let style_name = cfg.style().map(|s| s.to_string());
+    let custom_css = if let Some(ref name) = style_name {
+        let css_path = mip::config::style_css_path(name);
+        match fs::read_to_string(&css_path) {
+            Ok(css) => css,
+            Err(_) => {
+                eprintln!("warning: style '{}' not found at {}", name, css_path.display());
+                String::new()
+            }
+        }
+    } else {
+        String::new()
+    };
+
     let path_file = path_file0;
 
     let path_parsed = Path::new(&path_file);
@@ -226,7 +272,7 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string, math);
+        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string, math, &custom_css);
 
         // Channel for :open to send new file paths to the watcher
         let (new_file_tx, new_file_rx) = std::sync::mpsc::channel::<PathBuf>();
@@ -249,6 +295,7 @@ fn main() {
                         theme_class_for_watcher,
                         new_file_rx,
                         math,
+                        custom_css,
                     ) {
                         println!("error: {:?}", e)
                     }
@@ -262,7 +309,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size(), new_file_tx, math);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size(), new_file_tx, math, style_name.as_deref());
     }
     else{
         panic!("E2");

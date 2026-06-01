@@ -64,7 +64,7 @@ fn test_md_to_html_body_frontmatter_shown() {
 fn test_build_html_replaces_placeholders() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}<script>var seedUrl=\"#{SEEDURL}\";var initialSeed=\"#{INITIALSEED}\";</script></body></html>";
     let md = "# Hello";
-    let result = build_html(md, template, "abc1234", "http://localhost:8000/.temp.seed", false, "dark", false);
+    let result = build_html(md, template, "abc1234", "http://localhost:8000/.temp.seed", false, "dark", false, "");
 
     assert!(result.contains("<h1 id=\"hello\">Hello</h1>"));
     assert!(!result.contains("#{BODY}"));
@@ -79,7 +79,7 @@ fn test_build_html_replaces_placeholders() {
 #[test]
 fn test_build_html_applies_theme_class() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}</body></html>";
-    let result = build_html("hello", template, "s", "u", false, "light", false);
+    let result = build_html("hello", template, "s", "u", false, "light", false, "");
     assert!(result.contains("class=\"light\""));
 }
 
@@ -87,7 +87,7 @@ fn test_build_html_applies_theme_class() {
 fn test_build_html_with_frontmatter() {
     let template = "<html>#{BODY}</html>";
     let md = "---\ntitle: Test\n---\n\nBody text";
-    let result = build_html(md, template, "s", "u", true, "light", false);
+    let result = build_html(md, template, "s", "u", true, "light", false, "");
     assert!(result.contains("<table class=\"frontmatter\">"));
     assert!(result.contains("title"));
 }
@@ -200,7 +200,7 @@ fn test_math_in_fenced_code_block_not_rendered() {
 #[test]
 fn test_build_html_math_enabled_includes_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", true);
+    let result = build_html("$x$", template, "s", "u", false, "light", true, "");
     assert!(result.contains("katex.min.js"));
     assert!(result.contains("katex.min.css"));
     assert!(result.contains("renderMath"));
@@ -209,7 +209,23 @@ fn test_build_html_math_enabled_includes_katex() {
 #[test]
 fn test_build_html_math_disabled_no_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", false);
+    let result = build_html("$x$", template, "s", "u", false, "light", false, "");
     assert!(!result.contains("katex.min.js"));
     assert!(!result.contains("renderMath"));
+}
+
+#[test]
+fn test_build_html_replaces_custom_css_placeholder() {
+    let template = "<html><head><style>default</style><style id=\"custom-css\">#{CUSTOM_CSS}</style></head><body>#{BODY}</body></html>";
+    let result = build_html("hello", template, "s", "u", false, "light", false, "body { color: red; }");
+    assert!(result.contains("body { color: red; }"));
+    assert!(!result.contains("#{CUSTOM_CSS}"));
+}
+
+#[test]
+fn test_build_html_empty_custom_css() {
+    let template = "<html><head><style>default</style><style id=\"custom-css\">#{CUSTOM_CSS}</style></head><body>#{BODY}</body></html>";
+    let result = build_html("hello", template, "s", "u", false, "light", false, "");
+    assert!(result.contains("<style id=\"custom-css\"></style>"));
+    assert!(!result.contains("#{CUSTOM_CSS}"));
 }

@@ -71,3 +71,10 @@ The system SHALL accept a `--initconf` flag that generates a default config file
 #### Scenario: Initconf flag
 - **WHEN** the user runs `mip --initconf`
 - **THEN** the system SHALL generate the config file and exit (no file argument required, no preview window)
+
+### Requirement: --initstyle flag
+The system SHALL accept `--initstyle <name>` to scaffold a new custom style and exit.
+
+#### Scenario: Initstyle flag
+- **WHEN** the user runs `mip --initstyle mytheme`
+- **THEN** the system SHALL create the style directory and CSS file, print the path, and exit

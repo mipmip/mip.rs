@@ -14,7 +14,7 @@ const COMMANDS: &[&str] = &[
 ];
 
 const SETTINGS: &[&str] = &[
-    "frontmatter", "paragraph_numbers", "paragraph_numbers_start", "theme",
+    "frontmatter", "paragraph_numbers", "paragraph_numbers_start", "style", "theme",
 ];
 
 /// Match a prefix against the known settings list. Returns sorted matches.
@@ -979,7 +979,7 @@ mod tests {
     #[test]
     fn test_match_settings_empty_prefix() {
         let matches = match_settings("");
-        assert_eq!(matches.len(), 4);
+        assert_eq!(matches.len(), 5);
     }
 
     #[test]

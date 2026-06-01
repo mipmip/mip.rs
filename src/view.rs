@@ -171,6 +171,7 @@ pub struct RuntimeSettings {
     pub infile: std::cell::RefCell<String>,
     pub filename: std::cell::RefCell<String>,
     pub math: std::cell::Cell<bool>,
+    pub style: std::cell::RefCell<String>,
 }
 
 struct CommandContext {
@@ -229,7 +230,16 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         "dark" => "dark",
                         _ => if crate::is_system_dark() { "dark" } else { "light" },
                     };
-                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class, ctx.settings.math.get());
+                    // Load custom CSS for the current style
+                    let style_css = {
+                        let style_name = ctx.settings.style.borrow();
+                        if style_name.is_empty() {
+                            String::new()
+                        } else {
+                            std::fs::read_to_string(crate::config::style_css_path(&style_name)).unwrap_or_default()
+                        }
+                    };
+                    crate::markdown::to_html(&new_infile, &ctx.temp_dir, ctx.port, sf, theme_class, ctx.settings.math.get(), &style_css);
 
                     // Update window title
                     let window_title = format!("{} - MiP", new_filename);
@@ -374,6 +384,32 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         ctx.settings.force_render.set(true);
                     } else {
                         eprintln!("warning: invalid value '{}' for theme (expected system/light/dark)", value);
+                    }
+                }
+                "style" => {
+                    *ctx.settings.style.borrow_mut() = value.to_string();
+                    if value.is_empty() {
+                        // Clear custom CSS
+                        let js = "document.getElementById('custom-css').textContent = '';";
+                        ctx.webview.evaluate_javascript(js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                    } else {
+                        let css_path = crate::config::style_css_path(value);
+                        match std::fs::read_to_string(&css_path) {
+                            Ok(css) => {
+                                let escaped = css
+                                    .replace('\\', "\\\\")
+                                    .replace('`', "\\`")
+                                    .replace("${", "\\${");
+                                let js = format!(
+                                    "document.getElementById('custom-css').textContent = `{}`;",
+                                    escaped
+                                );
+                                ctx.webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                            }
+                            Err(_) => {
+                                eprintln!("warning: style '{}' not found at {}", value, css_path.display());
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -562,10 +598,11 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>, math: bool) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, watcher_tx: std::sync::mpsc::Sender<PathBuf>, math: bool, style: Option<&str>) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
+    let style = style.unwrap_or("").to_string();
     let keybinding_registry = std::rc::Rc::new(keybinding_registry);
     let sidetoc_width = sidetoc_width as i32;
     let sidetoc_right = sidetoc_position == "right";
@@ -717,6 +754,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 infile: std::cell::RefCell::new(infile_path.clone()),
                 filename: std::cell::RefCell::new(filename),
                 math: std::cell::Cell::new(math),
+                style: std::cell::RefCell::new(style.clone()),
             },
             watcher_tx: watcher_tx.clone(),
             temp_dir: temp_dir.clone(),
@@ -1205,9 +1243,44 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         let mut last_system_dark: Option<bool> = Some(crate::is_system_dark());
         let mut last_toc: Vec<TocEntry> = initial_toc;
         let mut last_html_body = String::new();
+        let mut last_css_mtime: Option<std::time::SystemTime> = {
+            let style_name = style.clone();
+            if style_name.is_empty() {
+                None
+            } else {
+                std::fs::metadata(crate::config::style_css_path(&style_name))
+                    .and_then(|m| m.modified())
+                    .ok()
+            }
+        };
         let ctx_for_poll = cmd_ctx.clone();
 
         glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+            // Check for custom CSS file changes (live-reload)
+            {
+                let style_name = ctx_for_poll.settings.style.borrow().clone();
+                if !style_name.is_empty() {
+                    let css_path = crate::config::style_css_path(&style_name);
+                    let current_mtime = std::fs::metadata(&css_path)
+                        .and_then(|m| m.modified())
+                        .ok();
+                    if current_mtime != last_css_mtime {
+                        last_css_mtime = current_mtime;
+                        if let Ok(css) = std::fs::read_to_string(&css_path) {
+                            let escaped = css
+                                .replace('\\', "\\\\")
+                                .replace('`', "\\`")
+                                .replace("${", "\\${");
+                            let js = format!(
+                                "document.getElementById('custom-css').textContent = `{}`;",
+                                escaped
+                            );
+                            webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                        }
+                    }
+                }
+            }
+
             // Check for system theme changes (only when theme is "system")
             if let Some(ref mut was_dark) = last_system_dark {
                 let current_theme = ctx_for_poll.settings.theme.borrow().clone();

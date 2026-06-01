@@ -15,6 +15,7 @@ pub struct Config {
     pub paragraph_numbers_start: Option<u8>,
     pub history_size: Option<u32>,
     pub math: Option<bool>,
+    pub style: Option<String>,
 }
 
 impl Config {
@@ -104,6 +105,77 @@ impl Config {
     pub fn math(&self) -> bool {
         self.math.unwrap_or(true)
     }
+
+    pub fn style(&self) -> Option<&str> {
+        self.style.as_deref()
+    }
+}
+
+/// Returns the styles directory path: `~/.config/miprs/styles/`
+pub fn styles_dir() -> PathBuf {
+    let config_dir = std::env::var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            PathBuf::from(home).join(".config")
+        });
+    config_dir.join("miprs").join("styles")
+}
+
+/// Returns the path to a style's CSS file: `~/.config/miprs/styles/<name>/style.css`
+pub fn style_css_path(name: &str) -> PathBuf {
+    styles_dir().join(name).join("style.css")
+}
+
+/// Returns a documented default CSS template for `--initstyle`.
+pub fn default_style_css() -> &'static str {
+    r#"/* Custom style for mip
+ * This file is loaded after the default styles, so you can override
+ * any CSS variable or rule. The default theme variables are:
+ *
+ * :root (light mode):
+ *   --fg: #333           (text color)
+ *   --heading: #111      (heading color)
+ *   --bg: #fff           (background)
+ *   --link: #0969da      (link color)
+ *   --h1-border: #e0e0e0
+ *   --table-border: #efefef
+ *   --table-odd-bg: #f3f3f3
+ *   --blockquote-border: #ccc
+ *   --blockquote-bg: #eee
+ *   --code-bg: #f6f8fa
+ *   --strong-border: #aaa
+ *   --frontmatter-border: #ddd
+ *   --frontmatter-th-bg: #f6f8fa
+ *
+ * .dark (dark mode):
+ *   --fg: #d4d4d4
+ *   --heading: #e0e0e0
+ *   --bg: #1a1a2e
+ *   --link: #58a6ff
+ *   --h1-border: #333
+ *   --table-border: #333
+ *   --table-odd-bg: #222
+ *   --blockquote-border: #444
+ *   --blockquote-bg: #252525
+ *   --code-bg: #2d2d3f
+ *   --strong-border: #666
+ *   --frontmatter-border: #444
+ *   --frontmatter-th-bg: #2d2d3f
+ *
+ * Example: Override background and text for light mode:
+ *   :root { --bg: #fdf6e3; --fg: #586e75; }
+ *
+ * Example: Override dark mode:
+ *   .dark { --bg: #002b36; --fg: #839496; }
+ *
+ * Example: Change heading font:
+ *   h1, h2, h3, h4, h5, h6 { font-family: Georgia, serif; }
+ *
+ * Example: Wider content area:
+ *   .section { max-width: 900px; margin: 0 auto; }
+ */
+"#
 }
 
 /// Returns the documented default config template.
@@ -139,6 +211,10 @@ paragraph_numbers_start = 1
 
 # Enable TeX math rendering via KaTeX ($..$ inline, $$...$$ display)
 math = true
+
+# Custom style name — loads CSS from ~/.config/miprs/styles/<name>/style.css
+# Create a new style with: mip --initstyle <name>
+# style = "academic"
 
 # Maximum number of command bar history entries to keep
 history_size = 50

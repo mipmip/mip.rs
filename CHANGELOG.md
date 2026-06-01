@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- add custom styles: load user CSS from `~/.config/miprs/styles/<name>/style.css` with live-reload
+- add `style` config setting to select a custom style
+- add `--initstyle <name>` CLI flag to scaffold a new style with documented default CSS
+- add `:set style <name>` for runtime style switching, `:set style` (empty) reverts to default
+- custom CSS injected after default styles via `<style id="custom-css">`, supports dark/light mode overrides
 - add `export_html` command: export current document as a self-contained HTML file (DOM capture with scripts/localhost refs stripped)
 - add vim-style navigation: j/k scroll, Ctrl+f/b page scroll, Ctrl+d/u half-page, g,g/shift+G top/bottom, n/N heading jump
 - add key sequence support in keybinding system (comma-separated sequences like `g,g` with 500ms timeout)
