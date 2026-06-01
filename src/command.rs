@@ -203,7 +203,7 @@ pub fn parse_key_combo(s: &str) -> Option<KeyCombo> {
         return None;
     }
 
-    let key_name = parts.last().unwrap().to_lowercase();
+    let key_name = normalize_key_name(&parts.last().unwrap().to_lowercase());
     if !is_known_key(&key_name) {
         return None;
     }
@@ -227,6 +227,25 @@ pub fn parse_key_combo(s: &str) -> Option<KeyCombo> {
     }
 
     Some(combo)
+}
+
+/// Normalize symbol characters to their key names.
+fn normalize_key_name(name: &str) -> String {
+    match name {
+        "-" => "minus".to_string(),
+        "+" => "plus".to_string(),
+        "=" => "equal".to_string(),
+        "[" => "bracketleft".to_string(),
+        "]" => "bracketright".to_string(),
+        ";" => "semicolon".to_string(),
+        "'" => "apostrophe".to_string(),
+        "," => "comma".to_string(),
+        "." => "period".to_string(),
+        "/" => "slash".to_string(),
+        "\\" => "backslash".to_string(),
+        "`" => "grave".to_string(),
+        _ => name.to_string(),
+    }
 }
 
 fn is_known_key(name: &str) -> bool {

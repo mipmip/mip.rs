@@ -13,6 +13,7 @@ pub struct Config {
     pub keybindings: Option<std::collections::HashMap<String, String>>,
     pub paragraph_numbers: Option<bool>,
     pub paragraph_numbers_start: Option<u8>,
+    pub history_size: Option<u32>,
 }
 
 impl Config {
@@ -94,6 +95,10 @@ impl Config {
     pub fn paragraph_numbers_start(&self) -> u8 {
         self.paragraph_numbers_start.unwrap_or(1).clamp(1, 6)
     }
+
+    pub fn history_size(&self) -> usize {
+        self.history_size.unwrap_or(50) as usize
+    }
 }
 
 /// Returns the documented default config template.
@@ -126,6 +131,9 @@ paragraph_numbers = false
 # Heading level to start numbering from (1 = H1, 2 = H2, etc.)
 # Useful when H1 is a document title and you want numbering from H2
 paragraph_numbers_start = 1
+
+# Maximum number of command bar history entries to keep
+history_size = 50
 
 # Keybindings: key_combo = "command"
 # Key combos: ctrl+key, shift+key, alt+key, super+key, or plain key

@@ -398,19 +398,25 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
     let keybinding_registry = std::rc::Rc::new(keybinding_registry);
     let sidetoc_width = sidetoc_width as i32;
     let sidetoc_right = sidetoc_position == "right";
+    let history_path = crate::history::history_path();
+    let history = std::rc::Rc::new(std::cell::RefCell::new(
+        crate::history::CommandHistory::load(&history_path, history_size),
+    ));
     let app = Application::builder()
         .application_id("org.mipmip.mip")
         .build();
 
     let html_path = temp_dir.join(".temp.html");
     let seed_path = temp_dir.join(".temp.seed");
+    let history_for_shutdown = history.clone();
+    let history_path_for_shutdown = history_path.clone();
 
     app.connect_activate(move |app| {
         wait_for_server(port);
@@ -638,6 +644,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             let webview_for_activate = webview.clone();
             let wildmenu_for_activate = wildmenu_label.clone();
             let ctx = cmd_ctx.clone();
+            let history_for_activate = history.clone();
             cmd_entry.connect_activate(move |entry| {
                 let text = entry.text().to_string();
                 cmd_entry_for_activate.set_text("");
@@ -646,6 +653,9 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                 webview_for_activate.grab_focus();
                 // Strip leading : and execute (supports ; composition)
                 let text = text.strip_prefix(':').unwrap_or(&text);
+                if !text.is_empty() {
+                    history_for_activate.borrow_mut().push(text);
+                }
                 execute_commands(text, &ctx);
             });
         }
@@ -664,6 +674,14 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             let tab_matches_clone = tab_matches.clone();
             let tab_index_clone = tab_index.clone();
             let tab_prefix_clone = tab_prefix.clone();
+
+            let hist_index: std::rc::Rc<std::cell::Cell<Option<usize>>> = std::rc::Rc::new(std::cell::Cell::new(None));
+            let hist_matches: std::rc::Rc<std::cell::RefCell<Vec<String>>> = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let hist_saved: std::rc::Rc<std::cell::RefCell<String>> = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
+            let hist_index_clone = hist_index.clone();
+            let hist_matches_clone = hist_matches.clone();
+            let hist_saved_clone = hist_saved.clone();
+            let history_for_keys = history.clone();
 
             key_controller_entry.connect_key_pressed(move |_, keyval, _keycode, state| {
                 let shift = state.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
@@ -708,6 +726,61 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         );
                         glib::Propagation::Stop
                     }
+                    v if v == gtk4::gdk::Key::Up => {
+                        // Build filtered matches on first ↑ press
+                        if hist_index_clone.get().is_none() {
+                            let text = cmd_entry_for_keys.text().to_string();
+                            let prefix = text.strip_prefix(':').unwrap_or(&text);
+                            *hist_saved_clone.borrow_mut() = prefix.to_string();
+                            let matches: Vec<String> = history_for_keys.borrow()
+                                .filter(prefix)
+                                .into_iter()
+                                .map(|s| s.to_string())
+                                .collect();
+                            *hist_matches_clone.borrow_mut() = matches;
+                            let len = hist_matches_clone.borrow().len();
+                            if len > 0 {
+                                hist_index_clone.set(Some(len - 1));
+                            }
+                        } else if let Some(idx) = hist_index_clone.get() {
+                            if idx > 0 {
+                                hist_index_clone.set(Some(idx - 1));
+                            }
+                        }
+                        // Show entry at current index
+                        if let Some(idx) = hist_index_clone.get() {
+                            let matches = hist_matches_clone.borrow();
+                            if let Some(entry) = matches.get(idx) {
+                                let new_text = format!(":{}", entry);
+                                cmd_entry_for_keys.set_text(&new_text);
+                                cmd_entry_for_keys.set_position(new_text.len() as i32);
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
+                    v if v == gtk4::gdk::Key::Down => {
+                        if let Some(idx) = hist_index_clone.get() {
+                            let len = hist_matches_clone.borrow().len();
+                            if idx + 1 < len {
+                                hist_index_clone.set(Some(idx + 1));
+                                let matches = hist_matches_clone.borrow();
+                                if let Some(entry) = matches.get(idx + 1) {
+                                    let new_text = format!(":{}", entry);
+                                    cmd_entry_for_keys.set_text(&new_text);
+                                    cmd_entry_for_keys.set_position(new_text.len() as i32);
+                                }
+                            } else {
+                                // Past newest: restore saved input
+                                hist_index_clone.set(None);
+                                hist_matches_clone.borrow_mut().clear();
+                                let saved = hist_saved_clone.borrow().clone();
+                                let new_text = format!(":{}", saved);
+                                cmd_entry_for_keys.set_text(&new_text);
+                                cmd_entry_for_keys.set_position(new_text.len() as i32);
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
                     v if v == gtk4::gdk::Key::Home || (v == gtk4::gdk::Key::Left && cmd_entry_for_keys.position() <= 1) => {
                         glib::Propagation::Stop
                     }
@@ -727,6 +800,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                             tab_matches_clone.borrow_mut().clear();
                             tab_index_clone.set(0);
                             wildmenu_for_keys.set_visible(false);
+                            hist_index_clone.set(None);
+                            hist_matches_clone.borrow_mut().clear();
                         }
                         glib::Propagation::Proceed
                     }
@@ -970,6 +1045,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
 
     let temp_dir_cleanup = temp_dir.clone();
     app.connect_shutdown(move |_| {
+        history_for_shutdown.borrow().save(&history_path_for_shutdown);
         let _ = std::fs::remove_dir_all(&temp_dir_cleanup);
     });
 

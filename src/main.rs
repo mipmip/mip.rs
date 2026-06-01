@@ -203,7 +203,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size());
     }
     else{
         panic!("E2");

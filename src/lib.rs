@@ -1,6 +1,7 @@
 pub mod markdown;
 pub mod config;
 pub mod command;
+pub mod history;
 pub mod server;
 pub mod view;
 

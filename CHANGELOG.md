@@ -45,6 +45,7 @@
 - add zoom: Ctrl+= (in), Ctrl+- (out), Ctrl+0 (reset), 10% steps, clamped 0.3–5.0
 - Tab completion for setting names after `:set `
 - fix Ctrl+key keybindings not matching when GDK sends control character keyvals
+- add persistent command bar history with ↑/↓ navigation and prefix filtering (`history_size` config, default 50)
 
 ## v0.3.0 - 28 May 2026
 

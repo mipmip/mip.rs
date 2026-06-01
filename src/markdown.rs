@@ -399,11 +399,15 @@ fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_f
         Ok(template) => {
             let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class);
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
-                eprintln!("warning: could not write seed file: {}", e);
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("warning: could not write seed file: {}", e);
+                }
                 return;
             }
             if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete) {
-                eprintln!("warning: could not write html file: {}", e);
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    eprintln!("warning: could not write html file: {}", e);
+                }
             }
         },
         Err(_) => println!("URF this..no file")
