@@ -56,26 +56,22 @@ impl RestBro {
             },
         );
 
-        let mermaid = warp::path("mermaid")
-            .and(warp::path::tail())
-            .and_then(|tail: warp::path::Tail| async move {
+        let mermaid = warp::path("mermaid").and(warp::path::tail()).and_then(
+            |tail: warp::path::Tail| async move {
                 let path = tail.as_str();
                 match MermaidAsset::get(path) {
                     Some(content) => {
                         let mime = mime_from_path(path);
                         Ok(warp::reply::with_header(
-                            warp::reply::with_header(
-                                content.data.to_vec(),
-                                "content-type",
-                                mime,
-                            ),
+                            warp::reply::with_header(content.data.to_vec(), "content-type", mime),
                             "cache-control",
                             "public, max-age=31536000",
                         ))
                     }
                     None => Err(warp::reject::not_found()),
                 }
-            });
+            },
+        );
 
         let assets = warp::fs::dir(path_dir);
 

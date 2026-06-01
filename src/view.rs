@@ -58,14 +58,17 @@ fn post_process_export(html: &str) -> String {
         // Check for tags we want to strip
         if bytes[i] == b'<' {
             // Strip <script...>...</script>
-            if html[i..].starts_with("<script") {
-                if let Some(end) = html[i..].find("</script>") {
-                    i += end + 9; // skip past </script>
-                    continue;
-                }
+            if html[i..].starts_with("<script")
+                && let Some(end) = html[i..].find("</script>")
+            {
+                i += end + 9; // skip past </script>
+                continue;
             }
             // Strip <link ...> referencing localhost
-            if html[i..].starts_with("<link ") || html[i..].starts_with("<link\n") || html[i..].starts_with("<link\t") {
+            if html[i..].starts_with("<link ")
+                || html[i..].starts_with("<link\n")
+                || html[i..].starts_with("<link\t")
+            {
                 // Find the end of this tag
                 if let Some(end) = html[i..].find('>') {
                     let tag = &html[i..i + end + 1];
@@ -76,11 +79,11 @@ fn post_process_export(html: &str) -> String {
                 }
             }
             // Strip <div id="header">...</div>
-            if html[i..].starts_with("<div id=\"header\"") {
-                if let Some(end) = html[i..].find("</div>") {
-                    i += end + 6; // skip past </div>
-                    continue;
-                }
+            if html[i..].starts_with("<div id=\"header\"")
+                && let Some(end) = html[i..].find("</div>")
+            {
+                i += end + 6; // skip past </div>
+                continue;
             }
         }
         result.push(html.as_bytes()[i] as char);
@@ -322,30 +325,32 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
             let path_clone = path.clone();
             ctx.webview.evaluate_javascript(
                 "document.documentElement.outerHTML",
-                None, None, None::<&gtk4::gio::Cancellable>,
-                move |result| {
-                    match result {
-                        Ok(value) => {
-                            let html = value.to_string();
-                            if html.is_empty() {
-                                eprintln!("warning: export_html got empty DOM result, not writing file");
-                                return;
-                            }
-                            let processed = post_process_export(&html);
-                            let out = std::path::Path::new(&path_clone);
-                            if let Some(parent) = out.parent() {
-                                if let Err(e) = std::fs::create_dir_all(parent) {
-                                    eprintln!("warning: export_html could not create directories: {}", e);
-                                    return;
-                                }
-                            }
-                            if let Err(e) = std::fs::write(out, processed) {
-                                eprintln!("warning: export_html failed to write file: {}", e);
-                            }
+                None,
+                None,
+                None::<&gtk4::gio::Cancellable>,
+                move |result| match result {
+                    Ok(value) => {
+                        let html = value.to_string();
+                        if html.is_empty() {
+                            eprintln!(
+                                "warning: export_html got empty DOM result, not writing file"
+                            );
+                            return;
                         }
-                        Err(e) => {
-                            eprintln!("warning: export_html JS evaluation error: {}", e);
+                        let processed = post_process_export(&html);
+                        let out = std::path::Path::new(&path_clone);
+                        if let Some(parent) = out.parent()
+                            && let Err(e) = std::fs::create_dir_all(parent)
+                        {
+                            eprintln!("warning: export_html could not create directories: {}", e);
+                            return;
                         }
+                        if let Err(e) = std::fs::write(out, processed) {
+                            eprintln!("warning: export_html failed to write file: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("warning: export_html JS evaluation error: {}", e);
                     }
                 },
             );

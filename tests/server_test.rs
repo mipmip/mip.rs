@@ -171,7 +171,14 @@ async fn test_route_mermaid_js() {
         .await;
 
     assert_eq!(resp.status(), 200);
-    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("javascript"));
+    assert!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("javascript")
+    );
     let body = String::from_utf8_lossy(resp.body());
     assert!(body.len() > 1000); // mermaid.min.js is ~3MB
 }

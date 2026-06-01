@@ -406,6 +406,7 @@ const MERMAID_SCRIPTS: &str = r#"<script src="/mermaid/mermaid.min.js"></script>
       document.addEventListener('DOMContentLoaded',renderMermaid);
     </script>"#;
 
+#[allow(clippy::too_many_arguments)]
 pub fn build_html(
     markdown_input: &str,
     template: &str,
