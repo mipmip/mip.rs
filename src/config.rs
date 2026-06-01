@@ -181,6 +181,7 @@ history_size = 50
 #   scroll_bottom          - scroll to bottom (End, G)
 #   scroll_next_heading    - jump to next heading (n)
 #   scroll_prev_heading    - jump to previous heading (N)
+#   export_html <path>     - export current document as standalone HTML file
 [keybindings]
 tab = "quicktoc"
 "ctrl+p" = "print"
