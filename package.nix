@@ -1,8 +1,11 @@
 { pkgs ? import <nixpkgs> { } }:
 
+let
+  cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+in
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "mip";
-  version = "0.3.0";
+  version = cargoToml.package.version;
   cargoLock.lockFile = ./Cargo.lock;
   src = ./.;
 
@@ -18,11 +21,12 @@ pkgs.rustPlatform.buildRustPackage rec {
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
     gst_all_1.gst-plugins-good
+    gst_all_1.gst-plugins-bad
   ];
 
   preFixup = ''
     gappsWrapperArgs+=(
-      --prefix GST_PLUGIN_PATH : "${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0"
+      --prefix GST_PLUGIN_PATH : "${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-bad}/lib/gstreamer-1.0"
     )
   '';
 }

@@ -23,4 +23,4 @@ clean:
 	rm -fv ./target
 
 release:
-	@echo WIP
+	bash scripts/release.sh

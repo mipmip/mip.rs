@@ -169,6 +169,8 @@ fn main() {
     let runcmd_string = runcmd.map(|s| s.to_string());
     let sidetoc_width = cfg.sidetoc_width();
     let sidetoc_position = cfg.sidetoc_position().to_string();
+    let paragraph_numbers = cfg.paragraph_numbers();
+    let paragraph_numbers_start = cfg.paragraph_numbers_start();
 
     // Build keybinding registry: defaults + config overrides
     let mut keybinding_registry = mip::command::KeybindingRegistry::with_defaults();
@@ -201,7 +203,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start);
     }
     else{
         panic!("E2");

@@ -125,7 +125,7 @@ Just run it.
 |---|---|
 | Why? | Because |
 "#;
-    let (html, toc) = md_to_html_body_with_toc(md, false);
+    let (html, toc) = md_to_html_body_with_toc(md, false, false, 1);
 
     assert_eq!(toc.len(), 8);
     assert_eq!(toc[0].title, "Introduction");
@@ -153,7 +153,7 @@ Just run it.
 #[test]
 fn test_md_to_html_body_with_toc_with_frontmatter() {
     let md = "---\ntitle: My Doc\n---\n\n# Real Heading\n\n## Sub Heading";
-    let (html, toc) = md_to_html_body_with_toc(md, true);
+    let (html, toc) = md_to_html_body_with_toc(md, true, false, 1);
 
     assert_eq!(toc.len(), 2);
     assert_eq!(toc[0].title, "Real Heading");
@@ -165,7 +165,7 @@ fn test_md_to_html_body_with_toc_with_frontmatter() {
 #[test]
 fn test_md_to_html_body_with_toc_code_in_heading() {
     let md = "## The `main` function";
-    let (_html, toc) = md_to_html_body_with_toc(md, false);
+    let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
 
     assert_eq!(toc.len(), 1);
     assert_eq!(toc[0].title, "The main function");

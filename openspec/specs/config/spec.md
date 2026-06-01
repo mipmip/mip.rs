@@ -71,3 +71,17 @@ The config file SHALL accept a `[keybindings]` section mapping key combo strings
 #### Scenario: Invalid key name in config
 - **WHEN** the config file contains an invalid key name in `[keybindings]`
 - **THEN** the system SHALL print a warning and skip that binding
+
+### Requirement: paragraph_numbers config setting
+The config file SHALL accept a `paragraph_numbers` key with boolean value.
+
+#### Scenario: Enable paragraph numbers
+- **WHEN** the config file contains `paragraph_numbers = true`
+- **THEN** the system SHALL show section numbers on headings
+
+### Requirement: paragraph_numbers_start config setting
+The config file SHALL accept a `paragraph_numbers_start` key with integer value (1-6).
+
+#### Scenario: Custom start level
+- **WHEN** the config file contains `paragraph_numbers_start = 2`
+- **THEN** numbering SHALL start from H2 headings

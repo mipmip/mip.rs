@@ -33,9 +33,13 @@
             gst_all_1.gstreamer
             gst_all_1.gst-plugins-base
             gst_all_1.gst-plugins-good
+            gst_all_1.gst-plugins-bad
+            gum
           ];
 
-          GST_PLUGIN_PATH = with pkgs.gst_all_1; "${gstreamer}/lib/gstreamer-1.0:${gst-plugins-base}/lib/gstreamer-1.0:${gst-plugins-good}/lib/gstreamer-1.0";
+          GST_PLUGIN_PATH = with pkgs.gst_all_1; "${gstreamer}/lib/gstreamer-1.0:${gst-plugins-base}/lib/gstreamer-1.0:${gst-plugins-good}/lib/gstreamer-1.0:${gst-plugins-bad}/lib/gstreamer-1.0";
+
+          XDG_DATA_DIRS = "${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${builtins.getEnv "XDG_DATA_DIRS"}";
 
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
         };

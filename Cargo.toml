@@ -20,3 +20,15 @@ serde = { version = "1", features = ["derive"] }
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["full", "test-util", "macros"] }
+
+[package.metadata.deb]
+maintainer = "Pim Snel <post@pimsnel.com>"
+copyright = "2022-2026, Pim Snel"
+license-file = ["LICENSE", "0"]
+extended-description = "Fast, bloatless markdown document viewer using GTK4 and WebKitGTK. Renders markdown in a webview with live reload, dark mode, table of contents, and Ctrl+P printing."
+section = "text"
+priority = "optional"
+depends = "$auto, libgtk-4-1, libwebkitgtk-6.0-4, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad"
+assets = [
+    ["target/release/mip", "usr/bin/", "755"],
+]

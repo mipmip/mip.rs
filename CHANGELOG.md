@@ -31,6 +31,20 @@
 - add configurable keybindings via `[keybindings]` section in config.toml
 - default keybindings: Tab → quicktoc, Ctrl+P → print
 - add `--initconf` flag to generate a documented default config file
+- add Ctrl+P print dialog via WebKitGTK PrintOperation (also supports "Print to File" for PDF export)
+- add `@media print` CSS that forces light theme colors regardless of screen theme
+- fix NixOS crash in file chooser by adding GTK4 gsettings schemas to `XDG_DATA_DIRS` in flake.nix
+- add hierarchical section numbers (`paragraph_numbers` + `paragraph_numbers_start` config), shown in preview and TOC
+- fix arrow/page keys stolen by GTK Paned divider
+- add sidetoc keyboard navigation: arrow up/down, left/right collapse/expand, Enter, Escape
+- add quicktoc left/right collapse/expand
+- add `sidetoc_focus` and `document_focus` commands
+- sidetoc auto-focuses on open, returns focus to document on close
+- add `:set` command for changing settings at runtime (theme, frontmatter, paragraph_numbers, paragraph_numbers_start)
+- runtime setting changes trigger immediate re-render
+- add zoom: Ctrl+= (in), Ctrl+- (out), Ctrl+0 (reset), 10% steps, clamped 0.3–5.0
+- Tab completion for setting names after `:set `
+- fix Ctrl+key keybindings not matching when GDK sends control character keyvals
 
 ## v0.3.0 - 28 May 2026
 

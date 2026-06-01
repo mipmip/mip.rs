@@ -174,7 +174,13 @@ fn extract_headings_and_inject_ids<'a>(
 }
 
 /// Convert raw markdown text to HTML body with TOC entries.
-pub fn md_to_html_body_with_toc(markdown_input: &str, show_frontmatter: bool) -> (String, Vec<TocEntry>) {
+/// When `paragraph_numbers` is true, injects section numbers into headings and TOC titles.
+pub fn md_to_html_body_with_toc(
+    markdown_input: &str,
+    show_frontmatter: bool,
+    paragraph_numbers: bool,
+    paragraph_numbers_start: u8,
+) -> (String, Vec<TocEntry>) {
     let matter = Matter::<YAML>::new();
     let result = matter.parse(markdown_input);
 
@@ -192,9 +198,84 @@ pub fn md_to_html_body_with_toc(markdown_input: &str, show_frontmatter: bool) ->
         }
     }
 
-    let (events, toc) = extract_headings_and_inject_ids(parser);
+    let (events, mut toc) = extract_headings_and_inject_ids(parser);
     html::push_html(&mut html_output, events.into_iter());
-    (rewrite_media_embeds(&html_output), toc)
+    let mut html_output = rewrite_media_embeds(&html_output);
+
+    if paragraph_numbers {
+        let numbers = compute_section_numbers(&toc, paragraph_numbers_start);
+        html_output = inject_section_numbers(&html_output, &toc, &numbers);
+        // Prepend numbers to TOC titles
+        for (entry, number) in toc.iter_mut().zip(numbers.iter()) {
+            if !number.is_empty() {
+                entry.title = format!("{} {}", number, entry.title);
+            }
+        }
+    }
+
+    (html_output, toc)
+}
+
+/// Compute hierarchical section numbers for TOC entries.
+/// Headings below `start_level` get empty strings.
+/// Returns a parallel vec of number strings ("1.", "1.1", "1.1.2", etc.).
+pub fn compute_section_numbers(entries: &[TocEntry], start_level: u8) -> Vec<String> {
+    let mut counters = [0u32; 6]; // h1..h6
+    let mut numbers = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        if entry.level < start_level {
+            numbers.push(String::new());
+            continue;
+        }
+
+        let depth = (entry.level - start_level) as usize;
+        if depth >= 6 {
+            numbers.push(String::new());
+            continue;
+        }
+
+        counters[depth] += 1;
+        // Reset all deeper counters
+        for d in (depth + 1)..6 {
+            counters[d] = 0;
+        }
+
+        // Build "1.2.3" from counters[0..=depth]
+        let num: String = counters[..=depth]
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+        numbers.push(num);
+    }
+
+    numbers
+}
+
+/// Inject section numbers into HTML heading tags.
+/// Finds `<h{n} id="...">` and prepends `<span class="section-number">N.N</span> `.
+fn inject_section_numbers(html: &str, entries: &[TocEntry], numbers: &[String]) -> String {
+    let mut result = html.to_string();
+
+    // Process in reverse order so earlier offsets aren't invalidated
+    for (entry, number) in entries.iter().zip(numbers.iter()).rev() {
+        if number.is_empty() {
+            continue;
+        }
+        // Find the heading tag with this anchor id
+        let id_pattern = format!("id=\"{}\"", entry.anchor_id);
+        if let Some(id_pos) = result.find(&id_pattern) {
+            // Find the closing > of the opening tag
+            if let Some(tag_end) = result[id_pos..].find('>') {
+                let insert_pos = id_pos + tag_end + 1;
+                let number_html = format!("<span class=\"section-number\">{}</span> ", number);
+                result.insert_str(insert_pos, &number_html);
+            }
+        }
+    }
+
+    result
 }
 
 const VIDEO_EXTENSIONS: &[&str] = &[".webm", ".mp4", ".mov", ".ogv"];
@@ -273,7 +354,7 @@ fn rewrite_media_embeds(html: &str) -> String {
 
 /// Convert raw markdown text to HTML body (without template wrapper).
 pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
-    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter);
+    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1);
     html
 }
 
@@ -432,7 +513,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_basic() {
         let md = "# Title\n\n## Section\n\nText\n\n### Sub";
-        let (html, toc) = md_to_html_body_with_toc(md, false);
+        let (html, toc) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0], TocEntry { level: 1, title: "Title".into(), anchor_id: "title".into() });
@@ -447,7 +528,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_skipped_levels() {
         let md = "# Top\n\n### Skipped h2\n\n## Back to h2";
-        let (_html, toc) = md_to_html_body_with_toc(md, false);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0].level, 1);
@@ -458,14 +539,14 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_no_headings() {
         let md = "Just a paragraph.\n\nAnother one.";
-        let (_html, toc) = md_to_html_body_with_toc(md, false);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
         assert!(toc.is_empty());
     }
 
     #[test]
     fn test_md_to_html_body_with_toc_duplicate_headings() {
         let md = "# Intro\n\n## Intro\n\n### Intro";
-        let (_html, toc) = md_to_html_body_with_toc(md, false);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
 
         assert_eq!(toc[0].anchor_id, "intro");
         assert_eq!(toc[1].anchor_id, "intro-1");
@@ -475,9 +556,80 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_frontmatter_excluded() {
         let md = "---\ntitle: Test\n---\n\n# Real Heading";
-        let (_html, toc) = md_to_html_body_with_toc(md, true);
+        let (_html, toc) = md_to_html_body_with_toc(md, true, false, 1);
 
         assert_eq!(toc.len(), 1);
         assert_eq!(toc[0].title, "Real Heading");
+    }
+
+    // compute_section_numbers tests
+    #[test]
+    fn test_section_numbers_basic_hierarchy() {
+        let entries = vec![
+            TocEntry { level: 1, title: "A".into(), anchor_id: "a".into() },
+            TocEntry { level: 2, title: "B".into(), anchor_id: "b".into() },
+            TocEntry { level: 2, title: "C".into(), anchor_id: "c".into() },
+            TocEntry { level: 1, title: "D".into(), anchor_id: "d".into() },
+            TocEntry { level: 2, title: "E".into(), anchor_id: "e".into() },
+            TocEntry { level: 3, title: "F".into(), anchor_id: "f".into() },
+        ];
+        let nums = compute_section_numbers(&entries, 1);
+        assert_eq!(nums, vec!["1", "1.1", "1.2", "2", "2.1", "2.1.1"]);
+    }
+
+    #[test]
+    fn test_section_numbers_start_level_2() {
+        let entries = vec![
+            TocEntry { level: 1, title: "Title".into(), anchor_id: "t".into() },
+            TocEntry { level: 2, title: "A".into(), anchor_id: "a".into() },
+            TocEntry { level: 3, title: "B".into(), anchor_id: "b".into() },
+            TocEntry { level: 2, title: "C".into(), anchor_id: "c".into() },
+        ];
+        let nums = compute_section_numbers(&entries, 2);
+        assert_eq!(nums, vec!["", "1", "1.1", "2"]);
+    }
+
+    #[test]
+    fn test_section_numbers_skipped_levels() {
+        let entries = vec![
+            TocEntry { level: 1, title: "A".into(), anchor_id: "a".into() },
+            TocEntry { level: 3, title: "B".into(), anchor_id: "b".into() },
+        ];
+        let nums = compute_section_numbers(&entries, 1);
+        assert_eq!(nums, vec!["1", "1.0.1"]);
+    }
+
+    #[test]
+    fn test_section_numbers_single() {
+        let entries = vec![
+            TocEntry { level: 2, title: "A".into(), anchor_id: "a".into() },
+        ];
+        let nums = compute_section_numbers(&entries, 2);
+        assert_eq!(nums, vec!["1"]);
+    }
+
+    #[test]
+    fn test_section_numbers_empty() {
+        let nums = compute_section_numbers(&[], 1);
+        assert!(nums.is_empty());
+    }
+
+    #[test]
+    fn test_section_numbers_with_toc_integration() {
+        let md = "# Title\n\n## First\n\n### Sub\n\n## Second";
+        let (_html, toc) = md_to_html_body_with_toc(md, false, true, 2);
+        // H1 has no number, H2 starts at 1
+        assert_eq!(toc[0].title, "Title"); // no number
+        assert_eq!(toc[1].title, "1 First");
+        assert_eq!(toc[2].title, "1.1 Sub");
+        assert_eq!(toc[3].title, "2 Second");
+    }
+
+    #[test]
+    fn test_section_numbers_in_html() {
+        let md = "# Heading One\n\n## Heading Two";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, true, 1);
+        assert!(html.contains("<span class=\"section-number\">1</span> Heading One"));
+        assert!(html.contains("<span class=\"section-number\">1.1</span> Heading Two"));
     }
 }

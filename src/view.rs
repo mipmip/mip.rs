@@ -7,7 +7,7 @@ use gtk4::glib::translate::IntoGlib;
 use gtk4::{Application, ApplicationWindow, ScrolledWindow, Paned, Orientation, Stack};
 use gtk4::glib;
 use webkit6::prelude::*;
-use webkit6::{WebView, NavigationPolicyDecision, PolicyDecisionType};
+use webkit6::{WebView, NavigationPolicyDecision, PolicyDecisionType, PrintOperation};
 
 use crate::markdown::TocEntry;
 
@@ -111,15 +111,25 @@ fn scroll_to_anchor(webview: &WebView, anchor_id: &str) {
 
 const SIDETOC_WIDTH_STEP: i32 = 50;
 
+pub struct RuntimeSettings {
+    pub frontmatter: std::cell::Cell<bool>,
+    pub paragraph_numbers: std::cell::Cell<bool>,
+    pub paragraph_numbers_start: std::cell::Cell<u8>,
+    pub theme: std::cell::RefCell<String>,
+    pub force_render: std::cell::Cell<bool>,
+}
+
 struct CommandContext {
     app: Application,
     window: ApplicationWindow,
     paned: Paned,
     stack: Stack,
     webview: WebView,
+    sidetoc_treeview: gtk4::TreeView,
     sidetoc_right: bool,
     sidetoc_width: i32,
     sidetoc_open: std::cell::Cell<bool>,
+    settings: RuntimeSettings,
 }
 
 fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
@@ -146,7 +156,16 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
             } else {
                 ctx.paned.set_position(ctx.sidetoc_width);
             }
+            ctx.sidetoc_treeview.grab_focus();
             ctx.sidetoc_open.set(true);
+        }
+        "document_focus" => {
+            ctx.webview.grab_focus();
+        }
+        "sidetoc_focus" => {
+            if ctx.sidetoc_open.get() {
+                ctx.sidetoc_treeview.grab_focus();
+            }
         }
         "sidetoc_close" => {
             if ctx.sidetoc_right {
@@ -154,6 +173,7 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
             } else {
                 ctx.paned.set_position(0);
             }
+            ctx.webview.grab_focus();
             ctx.sidetoc_open.set(false);
         }
         "sidetoc_toggle" => {
@@ -179,6 +199,58 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                 ctx.paned.set_position((pos - SIDETOC_WIDTH_STEP).max(0));
             }
         }
+        "print" => {
+            let print_op = PrintOperation::new(&ctx.webview);
+            print_op.run_dialog(Some(&ctx.window));
+        }
+        "set" => {
+            let mut parts = arg.splitn(2, char::is_whitespace);
+            let setting = parts.next().unwrap_or("").trim();
+            let value = parts.next().unwrap_or("").trim();
+            match setting {
+                "frontmatter" => {
+                    match value {
+                        "true" | "1" | "on" => ctx.settings.frontmatter.set(true),
+                        "false" | "0" | "off" => ctx.settings.frontmatter.set(false),
+                        _ => { eprintln!("warning: invalid value '{}' for frontmatter (expected true/false)", value); return; }
+                    }
+                    ctx.settings.force_render.set(true);
+                }
+                "paragraph_numbers" => {
+                    match value {
+                        "true" | "1" | "on" => ctx.settings.paragraph_numbers.set(true),
+                        "false" | "0" | "off" => ctx.settings.paragraph_numbers.set(false),
+                        _ => { eprintln!("warning: invalid value '{}' for paragraph_numbers (expected true/false)", value); return; }
+                    }
+                    ctx.settings.force_render.set(true);
+                }
+                "paragraph_numbers_start" => {
+                    if let Ok(n) = value.parse::<u8>() {
+                        ctx.settings.paragraph_numbers_start.set(n.clamp(1, 6));
+                        ctx.settings.force_render.set(true);
+                    } else {
+                        eprintln!("warning: invalid value '{}' for paragraph_numbers_start (expected 1-6)", value);
+                    }
+                }
+                "theme" => {
+                    if ["system", "light", "dark"].contains(&value) {
+                        *ctx.settings.theme.borrow_mut() = value.to_string();
+                        // Inject CSS class change immediately
+                        let class = match value {
+                            "light" => "light",
+                            "dark" => "dark",
+                            _ => if crate::is_system_dark() { "dark" } else { "light" },
+                        };
+                        let js = format!("document.documentElement.className = '{}';", class);
+                        ctx.webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                        ctx.settings.force_render.set(true);
+                    } else {
+                        eprintln!("warning: invalid value '{}' for theme (expected system/light/dark)", value);
+                    }
+                }
+                _ => {}
+            }
+        }
         "quicktoc" => {
             if ctx.stack.visible_child_name().as_deref() == Some("document") {
                 ctx.stack.set_visible_child_name("toc");
@@ -186,6 +258,17 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                 ctx.stack.set_visible_child_name("document");
                 ctx.webview.grab_focus();
             }
+        }
+        "zoom_in" => {
+            let level = (ctx.webview.zoom_level() + 0.1).min(5.0);
+            ctx.webview.set_zoom_level(level);
+        }
+        "zoom_out" => {
+            let level = (ctx.webview.zoom_level() - 0.1).max(0.3);
+            ctx.webview.set_zoom_level(level);
+        }
+        "zoom_reset" => {
+            ctx.webview.set_zoom_level(1.0);
         }
         _ => {}
     }
@@ -241,6 +324,36 @@ fn handle_tab_completion(
                 wildmenu.set_visible(true);
             }
         }
+    } else if let Some(setting_prefix) = text_stripped.strip_prefix("set ") {
+        // Setting name completion for :set
+        // Only complete the setting name (no space in the setting prefix yet)
+        let setting_prefix = setting_prefix.trim();
+        if !setting_prefix.contains(' ') {
+            if matches.borrow().is_empty() {
+                *prefix.borrow_mut() = setting_prefix.to_string();
+                let found = crate::command::match_settings(setting_prefix);
+                *matches.borrow_mut() = found;
+                index.set(0);
+            } else {
+                cycle_index(index, matches.borrow().len(), reverse);
+            }
+
+            let matches_ref = matches.borrow();
+            if let Some(completion) = matches_ref.get(index.get()) {
+                if matches_ref.len() == 1 {
+                    let new_text = format!(":set {} ", completion);
+                    entry.set_text(&new_text);
+                    entry.set_position(new_text.len() as i32);
+                    wildmenu.set_visible(false);
+                } else {
+                    let new_text = format!(":set {}", completion);
+                    entry.set_text(&new_text);
+                    entry.set_position(new_text.len() as i32);
+                    wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                    wildmenu.set_visible(true);
+                }
+            }
+        }
     } else {
         // Path completion for open/o commands
         if let Some(path_arg) = text_stripped.strip_prefix("open ").or_else(|| text_stripped.strip_prefix("o ")) {
@@ -285,8 +398,8 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry) {
-    let is_system_theme = theme_mode == "system";
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8) {
+    let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
     let keybinding_registry = std::rc::Rc::new(keybinding_registry);
@@ -340,7 +453,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         // Extract initial TOC
         let infile_path = infile.clone();
         let initial_toc = if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
-            let (_html, toc) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter);
+            let (_html, toc) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter, paragraph_numbers, paragraph_numbers_start);
             toc
         } else {
             Vec::new()
@@ -381,6 +494,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         // Allow shrinking to zero so we can collapse the sidetoc
         paned.set_shrink_start_child(true);
         paned.set_shrink_end_child(true);
+        // Prevent paned from stealing arrow/page keys for divider adjustment
+        paned.set_focusable(false);
         // Start with sidetoc collapsed (position 0 for left, max for right)
         if sidetoc_right {
             // Will be corrected after window is shown
@@ -405,9 +520,17 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             paned: paned.clone(),
             stack: stack.clone(),
             webview: webview.clone(),
+            sidetoc_treeview: treeview.clone(),
             sidetoc_right,
             sidetoc_width,
             sidetoc_open: std::cell::Cell::new(false),
+            settings: RuntimeSettings {
+                frontmatter: std::cell::Cell::new(show_frontmatter),
+                paragraph_numbers: std::cell::Cell::new(paragraph_numbers),
+                paragraph_numbers_start: std::cell::Cell::new(paragraph_numbers_start),
+                theme: std::cell::RefCell::new(theme_mode.to_string()),
+                force_render: std::cell::Cell::new(false),
+            },
         });
 
         // Command bar (hidden by default)
@@ -623,6 +746,57 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             });
         }
 
+        // Sidetoc treeview key handler: Escape closes, left/right collapse/expand, Enter scrolls
+        {
+            let ctx_for_keys = cmd_ctx.clone();
+            let treeview_for_keys = treeview.clone();
+            let key_controller_sidetoc = gtk4::EventControllerKey::new();
+            key_controller_sidetoc.connect_key_pressed(move |_, keyval, _keycode, _state| {
+                match keyval {
+                    v if v == gtk4::gdk::Key::Escape => {
+                        execute_command("sidetoc_close", "", &ctx_for_keys);
+                        glib::Propagation::Stop
+                    }
+                    v if v == gtk4::gdk::Key::Left => {
+                        // Collapse current row
+                        if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
+                            if treeview_for_keys.row_expanded(&path) {
+                                treeview_for_keys.collapse_row(&path);
+                            } else {
+                                // Move to parent if already collapsed
+                                let mut parent = path.clone();
+                                if parent.up() && parent.depth() > 0 {
+                                    TreeViewExt::set_cursor(&treeview_for_keys, &parent, None::<&gtk4::TreeViewColumn>, false);
+                                }
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
+                    v if v == gtk4::gdk::Key::Right => {
+                        // Expand current row
+                        if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
+                            if !treeview_for_keys.row_expanded(&path) {
+                                treeview_for_keys.expand_row(&path, false);
+                            } else {
+                                // Move to first child if already expanded
+                                let mut child = path.clone();
+                                child.append_index(0);
+                                TreeViewExt::set_cursor(&treeview_for_keys, &child, None::<&gtk4::TreeViewColumn>, false);
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
+                    v if v == gtk4::gdk::Key::l => {
+                        // Focus the webview (vim-style: l = move right to document)
+                        ctx_for_keys.webview.grab_focus();
+                        glib::Propagation::Stop
+                    }
+                    _ => glib::Propagation::Proceed,
+                }
+            });
+            treeview.add_controller(key_controller_sidetoc);
+        }
+
         // Connect quicktoc row-activated → scroll + switch back to document
         {
             let webview_for_qtoc = webview.clone();
@@ -675,6 +849,31 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         }
                         glib::Propagation::Stop
                     }
+                    v if v == gtk4::gdk::Key::Left => {
+                        if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
+                            if treeview_for_keys.row_expanded(&path) {
+                                treeview_for_keys.collapse_row(&path);
+                            } else {
+                                let mut parent = path.clone();
+                                if parent.up() && parent.depth() > 0 {
+                                    TreeViewExt::set_cursor(&treeview_for_keys, &parent, None::<&gtk4::TreeViewColumn>, false);
+                                }
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
+                    v if v == gtk4::gdk::Key::Right => {
+                        if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
+                            if !treeview_for_keys.row_expanded(&path) {
+                                treeview_for_keys.expand_row(&path, false);
+                            } else {
+                                let mut child = path.clone();
+                                child.append_index(0);
+                                TreeViewExt::set_cursor(&treeview_for_keys, &child, None::<&gtk4::TreeViewColumn>, false);
+                            }
+                        }
+                        glib::Propagation::Stop
+                    }
                     v if v == gtk4::gdk::Key::Escape => {
                         stack_for_keys.set_visible_child_name("document");
                         webview_for_keys.grab_focus();
@@ -695,30 +894,52 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         // to avoid the flicker of a full load_html() call.
         let seed_path = seed_path.clone();
         let mut last_seed = std::fs::read_to_string(&seed_path).unwrap_or_default();
-        let mut last_system_dark = if is_system_theme { Some(crate::is_system_dark()) } else { None };
+        let mut last_system_dark: Option<bool> = Some(crate::is_system_dark());
         let mut last_toc: Vec<TocEntry> = initial_toc;
         let mut last_html_body = String::new();
+        let ctx_for_poll = cmd_ctx.clone();
 
         glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-            // Check for system theme changes
+            // Check for system theme changes (only when theme is "system")
             if let Some(ref mut was_dark) = last_system_dark {
-                let now_dark = crate::is_system_dark();
-                if now_dark != *was_dark {
-                    *was_dark = now_dark;
-                    let class = if now_dark { "dark" } else { "light" };
-                    let js = format!(
-                        "document.documentElement.className = '{}';",
-                        class
-                    );
-                    webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                let current_theme = ctx_for_poll.settings.theme.borrow().clone();
+                if current_theme == "system" {
+                    let now_dark = crate::is_system_dark();
+                    if now_dark != *was_dark {
+                        *was_dark = now_dark;
+                        let class = if now_dark { "dark" } else { "light" };
+                        let js = format!(
+                            "document.documentElement.className = '{}';",
+                            class
+                        );
+                        webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                    }
                 }
             }
 
-            if let Ok(current_seed) = std::fs::read_to_string(&seed_path)
-                && current_seed != last_seed {
+            // Check for force render (from :set command)
+            let force = ctx_for_poll.settings.force_render.get();
+            if force {
+                ctx_for_poll.settings.force_render.set(false);
+            }
+
+            let seed_changed = if let Ok(current_seed) = std::fs::read_to_string(&seed_path) {
+                if current_seed != last_seed {
                     last_seed = current_seed;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if seed_changed || force {
                     if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
-                        let (html_body, toc_entries) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter);
+                        let sf = ctx_for_poll.settings.frontmatter.get();
+                        let pn = ctx_for_poll.settings.paragraph_numbers.get();
+                        let pns = ctx_for_poll.settings.paragraph_numbers_start.get();
+                        let (html_body, toc_entries) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns);
 
                         // Only update WebView if content actually changed
                         if html_body != last_html_body {
@@ -742,7 +963,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                             last_toc = toc_entries;
                         }
                     }
-                }
+            }
             glib::ControlFlow::Continue
         });
     });

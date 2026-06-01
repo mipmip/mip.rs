@@ -1,10 +1,11 @@
 ---
 # mip.rs-w5we
 title: Add simple Tex support
-status: todo
+status: in-progress
 type: feature
+priority: normal
 created_at: 2026-05-28T11:56:42Z
-updated_at: 2026-05-28T11:56:42Z
+updated_at: 2026-06-01T13:33:58Z
 ---
 
 GitHub issue #9

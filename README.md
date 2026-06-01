@@ -51,18 +51,6 @@ Binaries for macOS and Windows (v0.2.3 and earlier) can be downloaded from the
 mip [markdown file]
 ```
 
-## Todo
-
-- [ ] prj: Readme best practices
-- [ ] prj: refactor cleanup var names
-- [ ] prj: testing
-- [ ] prj: release workflow
-  - [ ] auto build binaries at release
-  - [ ] version tag script
-  - [ ] set version and date in changelog
-- [x] prog: nix build
-- [ ] app: linux desktop info
-
 ## Development with Nix
 
 ```bash
@@ -72,7 +60,6 @@ make
 ```
 
 ## Development
-
 
 ### Prerequisites
 

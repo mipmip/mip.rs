@@ -2,11 +2,25 @@
 /// All functions here are free of GTK dependencies for testability.
 
 const COMMANDS: &[&str] = &[
-    "close", "o", "open", "print", "q",
-    "quicktoc",
-    "sidetoc_close", "sidetoc_expand_width", "sidetoc_open",
+    "close", "document_focus", "o", "open", "print", "q",
+    "quicktoc", "set",
+    "sidetoc_close", "sidetoc_expand_width", "sidetoc_focus", "sidetoc_open",
     "sidetoc_shrink_width", "sidetoc_toggle",
+    "zoom_in", "zoom_out", "zoom_reset",
 ];
+
+const SETTINGS: &[&str] = &[
+    "frontmatter", "paragraph_numbers", "paragraph_numbers_start", "theme",
+];
+
+/// Match a prefix against the known settings list. Returns sorted matches.
+pub fn match_settings(prefix: &str) -> Vec<String> {
+    SETTINGS
+        .iter()
+        .filter(|s| s.starts_with(prefix))
+        .map(|s| s.to_string())
+        .collect()
+}
 
 pub fn expand_tilde(path: &str) -> String {
     if path.starts_with('~') {
@@ -258,6 +272,9 @@ pub fn keyval_to_name(keyval: u32) -> Option<String> {
         0x041..=0x05a => {        // GDK_KEY_A..Z (uppercase, map to lowercase)
             return Some(String::from(char::from((keyval as u8) + 32)));
         }
+        0x001..=0x01a => {        // Control characters (Ctrl+A=0x001 .. Ctrl+Z=0x01a)
+            return Some(String::from(char::from(keyval as u8 + 0x060)));  // map to a..z
+        }
         0x030..=0x039 => {        // GDK_KEY_0..9
             return Some(String::from(char::from(keyval as u8)));
         }
@@ -295,6 +312,9 @@ impl KeybindingRegistry {
         let mut registry = Self::new();
         registry.register_str("tab", "quicktoc");
         registry.register_str("ctrl+p", "print");
+        registry.register_str("ctrl+=", "zoom_in");
+        registry.register_str("ctrl+-", "zoom_out");
+        registry.register_str("ctrl+0", "zoom_reset");
         registry
     }
 
@@ -696,5 +716,31 @@ mod tests {
         reg.register_from_config(&config_bindings);
         assert_eq!(reg.lookup(0xff09, false, false, false, false), Some("sidetoc_toggle"));
         assert_eq!(reg.lookup(0x062, true, false, false, false), Some("quicktoc"));
+    }
+
+    // match_settings tests
+    #[test]
+    fn test_match_settings_prefix() {
+        let matches = match_settings("front");
+        assert_eq!(matches, vec!["frontmatter"]);
+    }
+
+    #[test]
+    fn test_match_settings_paragraph() {
+        let mut matches = match_settings("paragraph");
+        matches.sort();
+        assert_eq!(matches, vec!["paragraph_numbers", "paragraph_numbers_start"]);
+    }
+
+    #[test]
+    fn test_match_settings_no_match() {
+        let matches = match_settings("xyz");
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_match_settings_empty_prefix() {
+        let matches = match_settings("");
+        assert_eq!(matches.len(), 4);
     }
 }

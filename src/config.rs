@@ -11,6 +11,8 @@ pub struct Config {
     pub sidetoc_width: Option<u32>,
     pub sidetoc_position: Option<String>,
     pub keybindings: Option<std::collections::HashMap<String, String>>,
+    pub paragraph_numbers: Option<bool>,
+    pub paragraph_numbers_start: Option<u8>,
 }
 
 impl Config {
@@ -84,6 +86,14 @@ impl Config {
     pub fn sidetoc_position(&self) -> &str {
         self.sidetoc_position.as_deref().unwrap_or("left")
     }
+
+    pub fn paragraph_numbers(&self) -> bool {
+        self.paragraph_numbers.unwrap_or(false)
+    }
+
+    pub fn paragraph_numbers_start(&self) -> u8 {
+        self.paragraph_numbers_start.unwrap_or(1).clamp(1, 6)
+    }
 }
 
 /// Returns the documented default config template.
@@ -110,6 +120,13 @@ sidetoc_width = 250
 # Side table of contents position: "left" or "right"
 sidetoc_position = "left"
 
+# Show hierarchical section numbers on headings (1., 1.1, 1.1.1)
+paragraph_numbers = false
+
+# Heading level to start numbering from (1 = H1, 2 = H2, etc.)
+# Useful when H1 is a document title and you want numbering from H2
+paragraph_numbers_start = 1
+
 # Keybindings: key_combo = "command"
 # Key combos: ctrl+key, shift+key, alt+key, super+key, or plain key
 # Commands can be composed with semicolons: "cmd1; cmd2"
@@ -124,9 +141,17 @@ sidetoc_position = "left"
 #   sidetoc_toggle         - toggle side TOC panel
 #   sidetoc_expand_width   - widen side TOC panel
 #   sidetoc_shrink_width   - narrow side TOC panel
+#   sidetoc_focus          - focus the side TOC panel
+#   document_focus         - focus the document view
+#   zoom_in                - zoom in 10% (Ctrl+=)
+#   zoom_out               - zoom out 10% (Ctrl+-)
+#   zoom_reset             - reset zoom to 100% (Ctrl+0)
 [keybindings]
 tab = "quicktoc"
 "ctrl+p" = "print"
+"ctrl+=" = "zoom_in"
+"ctrl+-" = "zoom_out"
+"ctrl+0" = "zoom_reset"
 # "ctrl+b" = "sidetoc_toggle"
 # "ctrl+y" = "open ~/todo.md"
 "#
