@@ -7,6 +7,13 @@
 - add `--initstyle <name>` CLI flag to scaffold a new style with documented default CSS
 - add `:set style <name>` for runtime style switching, `:set style` (empty) reverts to default
 - custom CSS injected after default styles via `<style id="custom-css">`, supports dark/light mode overrides
+- add `make lint` (cargo fmt --check + cargo clippy -D warnings) and `make check` (lint + test) targets
+- fix all clippy warnings across codebase (collapsible_if, manual_strip, redundant_closure, while_let_loop, etc.)
+- apply cargo fmt to fix formatting drift
+- add Mermaid diagram support: render ` ```mermaid ` code blocks as interactive SVG diagrams (flowcharts, sequence, Gantt, class, state, ER, pie, journey, git graphs)
+- bundle mermaid.min.js (~3.3MB) in binary via rust-embed, served from local warp server at `/mermaid/*`
+- Mermaid diagrams respect light/dark theme and re-render on theme switch
+- add `mermaid` config option (bool, default `true`) and `--no-mermaid` CLI flag
 - add `export_html` command: export current document as a self-contained HTML file (DOM capture with scripts/localhost refs stripped)
 - add vim-style navigation: j/k scroll, Ctrl+f/b page scroll, Ctrl+d/u half-page, g,g/shift+G top/bottom, n/N heading jump
 - add key sequence support in keybinding system (comma-separated sequences like `g,g` with 500ms timeout)

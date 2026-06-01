@@ -16,6 +16,7 @@ pub struct Config {
     pub history_size: Option<u32>,
     pub math: Option<bool>,
     pub style: Option<String>,
+    pub mermaid: Option<bool>,
 }
 
 impl Config {
@@ -27,10 +28,7 @@ impl Config {
 
     /// Load config from a TOML string. Returns defaults if malformed.
     pub fn load_from_str(content: &str) -> Config {
-        match toml::from_str::<Config>(content) {
-            Ok(config) => config,
-            Err(_) => Config::default(),
-        }
+        toml::from_str::<Config>(content).unwrap_or_default()
     }
 
     /// Load config from an explicit path. Returns defaults if the file
@@ -43,23 +41,29 @@ impl Config {
 
         match toml::from_str::<Config>(&content) {
             Ok(config) => {
-                if let Some(ref theme) = config.theme {
-                    if !["system", "light", "dark"].contains(&theme.as_str()) {
-                        eprintln!("warning: invalid theme '{}' in config, using default", theme);
-                        return Config {
-                            theme: None,
-                            ..config
-                        };
-                    }
+                if let Some(ref theme) = config.theme
+                    && !["system", "light", "dark"].contains(&theme.as_str())
+                {
+                    eprintln!(
+                        "warning: invalid theme '{}' in config, using default",
+                        theme
+                    );
+                    return Config {
+                        theme: None,
+                        ..config
+                    };
                 }
-                if let Some(ref pos) = config.sidetoc_position {
-                    if !["left", "right"].contains(&pos.as_str()) {
-                        eprintln!("warning: invalid sidetoc_position '{}' in config, using default", pos);
-                        return Config {
-                            sidetoc_position: None,
-                            ..config
-                        };
-                    }
+                if let Some(ref pos) = config.sidetoc_position
+                    && !["left", "right"].contains(&pos.as_str())
+                {
+                    eprintln!(
+                        "warning: invalid sidetoc_position '{}' in config, using default",
+                        pos
+                    );
+                    return Config {
+                        sidetoc_position: None,
+                        ..config
+                    };
                 }
                 config
             }
@@ -108,6 +112,10 @@ impl Config {
 
     pub fn style(&self) -> Option<&str> {
         self.style.as_deref()
+    }
+
+    pub fn mermaid(&self) -> bool {
+        self.mermaid.unwrap_or(true)
     }
 }
 
@@ -215,6 +223,10 @@ math = true
 # Custom style name — loads CSS from ~/.config/miprs/styles/<name>/style.css
 # Create a new style with: mip --initstyle <name>
 # style = "academic"
+
+# Enable Mermaid diagram rendering (```mermaid code blocks)
+mermaid = true
+
 
 # Maximum number of command bar history entries to keep
 history_size = 50

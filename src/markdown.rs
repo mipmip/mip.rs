@@ -1,11 +1,11 @@
-use std::fs;
-use rand::Rng;
-use rand::distr::Alphanumeric;
-use rust_embed::Embed;
 use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use gray_matter::value::pod::Pod;
-use pulldown_cmark::{html, Event, Options, Parser, Tag, TagEnd, HeadingLevel};
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, html};
+use rand::Rng;
+use rand::distr::Alphanumeric;
+use rust_embed::Embed;
+use std::fs;
 
 #[derive(Embed)]
 #[folder = "asset/theme1"]
@@ -18,18 +18,16 @@ pub(crate) fn pod_to_html_value(pod: &Pod) -> String {
         Pod::Float(f) => f.to_string(),
         Pod::Boolean(b) => b.to_string(),
         Pod::Null => String::new(),
-        Pod::Array(items) => {
-            items.iter()
-                .map(|item| pod_to_html_value(item))
-                .collect::<Vec<_>>()
-                .join(", ")
-        }
-        Pod::Hash(map) => {
-            map.iter()
-                .map(|(k, v)| format!("{}: {}", k, pod_to_html_value(v)))
-                .collect::<Vec<_>>()
-                .join(", ")
-        }
+        Pod::Array(items) => items
+            .iter()
+            .map(pod_to_html_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        Pod::Hash(map) => map
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, pod_to_html_value(v)))
+            .collect::<Vec<_>>()
+            .join(", "),
     }
 }
 
@@ -211,10 +209,8 @@ pub fn md_to_html_body_with_toc(
 
     let mut html_output = String::new();
 
-    if show_frontmatter {
-        if let Some(ref data) = result.data {
-            html_output.push_str(&frontmatter_to_html(data));
-        }
+    if show_frontmatter && let Some(ref data) = result.data {
+        html_output.push_str(&frontmatter_to_html(data));
     }
 
     let (events, mut toc) = extract_headings_and_inject_ids(parser);
@@ -256,8 +252,8 @@ pub fn compute_section_numbers(entries: &[TocEntry], start_level: u8) -> Vec<Str
 
         counters[depth] += 1;
         // Reset all deeper counters
-        for d in (depth + 1)..6 {
-            counters[d] = 0;
+        for counter in counters.iter_mut().skip(depth + 1) {
+            *counter = 0;
         }
 
         // Build "1.2.3" from counters[0..=depth]
@@ -313,11 +309,12 @@ fn rewrite_media_embeds(html: &str) -> String {
     // Rewrite <a href="...video_ext">...</a> → <video>
     // pulldown-cmark produces: <a href="URL">text</a>
     let mut search_from = 0;
-    loop {
-        let Some(a_start) = result[search_from..].find("<a href=\"") else { break };
-        let a_start = search_from + a_start;
+    while let Some(a_start_rel) = result[search_from..].find("<a href=\"") {
+        let a_start = search_from + a_start_rel;
         let href_start = a_start + 9; // after <a href="
-        let Some(href_end) = result[href_start..].find('"') else { break };
+        let Some(href_end) = result[href_start..].find('"') else {
+            break;
+        };
         let href_end = href_start + href_end;
         let url = &result[href_start..href_end];
 
@@ -342,11 +339,12 @@ fn rewrite_media_embeds(html: &str) -> String {
     // Rewrite <img src="...video_ext" .../> → <video>
     // pulldown-cmark produces: <img src="URL" alt="text" />
     search_from = 0;
-    loop {
-        let Some(img_start) = result[search_from..].find("<img src=\"") else { break };
-        let img_start = search_from + img_start;
+    while let Some(img_start_rel) = result[search_from..].find("<img src=\"") {
+        let img_start = search_from + img_start_rel;
         let src_start = img_start + 10; // after <img src="
-        let Some(src_end) = result[src_start..].find('"') else { break };
+        let Some(src_end) = result[src_start..].find('"') else {
+            break;
+        };
         let src_end = src_start + src_end;
         let url = &result[src_start..src_end];
 
@@ -373,7 +371,8 @@ fn rewrite_media_embeds(html: &str) -> String {
 
 /// Convert raw markdown text to HTML body (without template wrapper).
 pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
-    let (html, _toc, _title) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1, false);
+    let (html, _toc, _title) =
+        md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1, false);
     html
 }
 
@@ -388,6 +387,26 @@ const MATH_SCRIPTS: &str = r#"<link rel="stylesheet" href="/katex/katex.min.css"
       document.addEventListener('DOMContentLoaded',renderMath);
     </script>"#;
 
+const MERMAID_SCRIPTS: &str = r#"<script src="/mermaid/mermaid.min.js"></script>
+    <script>
+      mermaid.initialize({startOnLoad:false,theme:document.documentElement.classList.contains('dark')?'dark':'default'});
+      function renderMermaid(){
+        document.querySelectorAll('code.language-mermaid').forEach(function(code){
+          var pre=code.parentElement;
+          pre.setAttribute('data-mermaid-source',code.textContent);
+          pre.classList.add('mermaid');
+          pre.textContent=code.textContent;
+        });
+        document.querySelectorAll('pre.mermaid[data-mermaid-source]').forEach(function(pre){
+          pre.removeAttribute('data-processed');
+          pre.textContent=pre.getAttribute('data-mermaid-source');
+        });
+        mermaid.run({querySelector:'.mermaid'});
+      }
+      document.addEventListener('DOMContentLoaded',renderMermaid);
+    </script>"#;
+
+#[allow(clippy::too_many_arguments)]
 pub fn build_html(
     markdown_input: &str,
     template: &str,
@@ -396,6 +415,7 @@ pub fn build_html(
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
+    mermaid: bool,
     custom_css: &str,
 ) -> String {
     let html_body = md_to_html_body(markdown_input, show_frontmatter);
@@ -408,16 +428,49 @@ pub fn build_html(
     if math {
         result = result.replace("</head>", &format!("{}\n</head>", MATH_SCRIPTS));
     }
+    if mermaid {
+        result = result.replace("</head>", &format!("{}\n</head>", MERMAID_SCRIPTS));
+    }
     result
 }
 
-pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool, custom_css: &str){
-
+#[allow(clippy::too_many_arguments)]
+pub fn to_html(
+    infile: &str,
+    output_dir: &std::path::Path,
+    port: u16,
+    show_frontmatter: bool,
+    theme_class: &str,
+    math: bool,
+    mermaid: bool,
+    custom_css: &str,
+) {
     let markdown_input = fs::read_to_string(infile);
-    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port, show_frontmatter, theme_class, math, custom_css) };
+    if let Ok(markdown_input) = markdown_input {
+        to_file(
+            &markdown_input,
+            output_dir,
+            port,
+            show_frontmatter,
+            theme_class,
+            math,
+            mermaid,
+            custom_css,
+        )
+    };
 }
 
-fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool, custom_css: &str){
+#[allow(clippy::too_many_arguments)]
+fn to_file(
+    markdown_input: &str,
+    output_dir: &std::path::Path,
+    port: u16,
+    show_frontmatter: bool,
+    theme_class: &str,
+    math: bool,
+    mermaid: bool,
+    custom_css: &str,
+) {
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
 
     let seed: String = rand::rng()
@@ -430,20 +483,30 @@ fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_f
     let index_html_str = std::str::from_utf8(index_html.data.as_ref());
     match index_html_str {
         Ok(template) => {
-            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class, math, custom_css);
+            let html_complete = build_html(
+                markdown_input,
+                template,
+                &seed,
+                &seed_url,
+                show_frontmatter,
+                theme_class,
+                math,
+                mermaid,
+                custom_css,
+            );
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     eprintln!("warning: could not write seed file: {}", e);
                 }
                 return;
             }
-            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete) {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("warning: could not write html file: {}", e);
-                }
+            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete)
+                && e.kind() != std::io::ErrorKind::NotFound
+            {
+                eprintln!("warning: could not write html file: {}", e);
             }
-        },
-        Err(_) => println!("URF this..no file")
+        }
+        Err(_) => println!("URF this..no file"),
     };
 }
 
@@ -482,10 +545,7 @@ mod tests {
 
     #[test]
     fn test_pod_to_html_value_array() {
-        let pod = Pod::Array(vec![
-            Pod::String("a".to_string()),
-            Pod::Integer(1),
-        ]);
+        let pod = Pod::Array(vec![Pod::String("a".to_string()), Pod::Integer(1)]);
         assert_eq!(pod_to_html_value(&pod), "a, 1");
     }
 
@@ -553,9 +613,30 @@ mod tests {
         let (html, toc, _title) = md_to_html_body_with_toc(md, false, false, 1, false);
 
         assert_eq!(toc.len(), 3);
-        assert_eq!(toc[0], TocEntry { level: 1, title: "Title".into(), anchor_id: "title".into() });
-        assert_eq!(toc[1], TocEntry { level: 2, title: "Section".into(), anchor_id: "section".into() });
-        assert_eq!(toc[2], TocEntry { level: 3, title: "Sub".into(), anchor_id: "sub".into() });
+        assert_eq!(
+            toc[0],
+            TocEntry {
+                level: 1,
+                title: "Title".into(),
+                anchor_id: "title".into()
+            }
+        );
+        assert_eq!(
+            toc[1],
+            TocEntry {
+                level: 2,
+                title: "Section".into(),
+                anchor_id: "section".into()
+            }
+        );
+        assert_eq!(
+            toc[2],
+            TocEntry {
+                level: 3,
+                title: "Sub".into(),
+                anchor_id: "sub".into()
+            }
+        );
 
         assert!(html.contains("<h1 id=\"title\">Title</h1>"));
         assert!(html.contains("<h2 id=\"section\">Section</h2>"));
@@ -603,12 +684,36 @@ mod tests {
     #[test]
     fn test_section_numbers_basic_hierarchy() {
         let entries = vec![
-            TocEntry { level: 1, title: "A".into(), anchor_id: "a".into() },
-            TocEntry { level: 2, title: "B".into(), anchor_id: "b".into() },
-            TocEntry { level: 2, title: "C".into(), anchor_id: "c".into() },
-            TocEntry { level: 1, title: "D".into(), anchor_id: "d".into() },
-            TocEntry { level: 2, title: "E".into(), anchor_id: "e".into() },
-            TocEntry { level: 3, title: "F".into(), anchor_id: "f".into() },
+            TocEntry {
+                level: 1,
+                title: "A".into(),
+                anchor_id: "a".into(),
+            },
+            TocEntry {
+                level: 2,
+                title: "B".into(),
+                anchor_id: "b".into(),
+            },
+            TocEntry {
+                level: 2,
+                title: "C".into(),
+                anchor_id: "c".into(),
+            },
+            TocEntry {
+                level: 1,
+                title: "D".into(),
+                anchor_id: "d".into(),
+            },
+            TocEntry {
+                level: 2,
+                title: "E".into(),
+                anchor_id: "e".into(),
+            },
+            TocEntry {
+                level: 3,
+                title: "F".into(),
+                anchor_id: "f".into(),
+            },
         ];
         let nums = compute_section_numbers(&entries, 1);
         assert_eq!(nums, vec!["1", "1.1", "1.2", "2", "2.1", "2.1.1"]);
@@ -617,10 +722,26 @@ mod tests {
     #[test]
     fn test_section_numbers_start_level_2() {
         let entries = vec![
-            TocEntry { level: 1, title: "Title".into(), anchor_id: "t".into() },
-            TocEntry { level: 2, title: "A".into(), anchor_id: "a".into() },
-            TocEntry { level: 3, title: "B".into(), anchor_id: "b".into() },
-            TocEntry { level: 2, title: "C".into(), anchor_id: "c".into() },
+            TocEntry {
+                level: 1,
+                title: "Title".into(),
+                anchor_id: "t".into(),
+            },
+            TocEntry {
+                level: 2,
+                title: "A".into(),
+                anchor_id: "a".into(),
+            },
+            TocEntry {
+                level: 3,
+                title: "B".into(),
+                anchor_id: "b".into(),
+            },
+            TocEntry {
+                level: 2,
+                title: "C".into(),
+                anchor_id: "c".into(),
+            },
         ];
         let nums = compute_section_numbers(&entries, 2);
         assert_eq!(nums, vec!["", "1", "1.1", "2"]);
@@ -629,8 +750,16 @@ mod tests {
     #[test]
     fn test_section_numbers_skipped_levels() {
         let entries = vec![
-            TocEntry { level: 1, title: "A".into(), anchor_id: "a".into() },
-            TocEntry { level: 3, title: "B".into(), anchor_id: "b".into() },
+            TocEntry {
+                level: 1,
+                title: "A".into(),
+                anchor_id: "a".into(),
+            },
+            TocEntry {
+                level: 3,
+                title: "B".into(),
+                anchor_id: "b".into(),
+            },
         ];
         let nums = compute_section_numbers(&entries, 1);
         assert_eq!(nums, vec!["1", "1.0.1"]);
@@ -638,9 +767,11 @@ mod tests {
 
     #[test]
     fn test_section_numbers_single() {
-        let entries = vec![
-            TocEntry { level: 2, title: "A".into(), anchor_id: "a".into() },
-        ];
+        let entries = vec![TocEntry {
+            level: 2,
+            title: "A".into(),
+            anchor_id: "a".into(),
+        }];
         let nums = compute_section_numbers(&entries, 2);
         assert_eq!(nums, vec!["1"]);
     }

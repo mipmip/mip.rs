@@ -1,5 +1,5 @@
-use std::io::Write;
 use mip::config::Config;
+use std::io::Write;
 
 fn write_temp_config(content: &str) -> tempfile::NamedTempFile {
     let mut file = tempfile::NamedTempFile::new().unwrap();
@@ -26,7 +26,9 @@ fn test_load_from_valid_config_light_theme() {
 
 #[test]
 fn test_load_from_missing_file() {
-    let cfg = Config::load_from(std::path::Path::new("/tmp/nonexistent-miprs-config-xyz.toml"));
+    let cfg = Config::load_from(std::path::Path::new(
+        "/tmp/nonexistent-miprs-config-xyz.toml",
+    ));
     assert_eq!(cfg.theme(), "system");
     assert!(!cfg.frontmatter());
 }
@@ -129,7 +131,11 @@ fn test_default_config_template_contains_all_settings() {
 fn test_default_config_template_is_valid_toml() {
     let template = mip::config::default_config_template();
     let result: Result<toml::Value, _> = toml::from_str(template);
-    assert!(result.is_ok(), "Template is not valid TOML: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Template is not valid TOML: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -191,8 +197,8 @@ fn test_style_css_path_returns_correct_path() {
 fn test_default_style_css_is_nonempty() {
     let css = mip::config::default_style_css();
     assert!(!css.is_empty());
-    assert!(css.contains("/*"));  // has comments
-    assert!(css.contains("--bg"));  // documents CSS variables
+    assert!(css.contains("/*"));
+    assert!(css.contains("--bg"));
 }
 
 #[test]
@@ -200,4 +206,25 @@ fn test_default_config_template_contains_style_docs() {
     let template = mip::config::default_config_template();
     assert!(template.contains("style"));
     assert!(template.contains("initstyle"));
+}
+
+#[test]
+fn test_load_from_mermaid_true() {
+    let file = write_temp_config("mermaid = true\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.mermaid());
+}
+
+#[test]
+fn test_load_from_mermaid_false() {
+    let file = write_temp_config("mermaid = false\n");
+    let cfg = Config::load_from(file.path());
+    assert!(!cfg.mermaid());
+}
+
+#[test]
+fn test_load_from_mermaid_missing_defaults_to_true() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.mermaid());
 }
