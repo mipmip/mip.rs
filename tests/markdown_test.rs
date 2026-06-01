@@ -64,7 +64,7 @@ fn test_md_to_html_body_frontmatter_shown() {
 fn test_build_html_replaces_placeholders() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}<script>var seedUrl=\"#{SEEDURL}\";var initialSeed=\"#{INITIALSEED}\";</script></body></html>";
     let md = "# Hello";
-    let result = build_html(md, template, "abc1234", "http://localhost:8000/.temp.seed", false, "dark");
+    let result = build_html(md, template, "abc1234", "http://localhost:8000/.temp.seed", false, "dark", false);
 
     assert!(result.contains("<h1 id=\"hello\">Hello</h1>"));
     assert!(!result.contains("#{BODY}"));
@@ -79,7 +79,7 @@ fn test_build_html_replaces_placeholders() {
 #[test]
 fn test_build_html_applies_theme_class() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}</body></html>";
-    let result = build_html("hello", template, "s", "u", false, "light");
+    let result = build_html("hello", template, "s", "u", false, "light", false);
     assert!(result.contains("class=\"light\""));
 }
 
@@ -87,7 +87,7 @@ fn test_build_html_applies_theme_class() {
 fn test_build_html_with_frontmatter() {
     let template = "<html>#{BODY}</html>";
     let md = "---\ntitle: Test\n---\n\nBody text";
-    let result = build_html(md, template, "s", "u", true, "light");
+    let result = build_html(md, template, "s", "u", true, "light", false);
     assert!(result.contains("<table class=\"frontmatter\">"));
     assert!(result.contains("title"));
 }
@@ -125,7 +125,7 @@ Just run it.
 |---|---|
 | Why? | Because |
 "#;
-    let (html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+    let (html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
 
     assert_eq!(toc.len(), 8);
     assert_eq!(toc[0].title, "Introduction");
@@ -153,7 +153,7 @@ Just run it.
 #[test]
 fn test_md_to_html_body_with_toc_with_frontmatter() {
     let md = "---\ntitle: My Doc\n---\n\n# Real Heading\n\n## Sub Heading";
-    let (html, toc) = md_to_html_body_with_toc(md, true, false, 1);
+    let (html, toc) = md_to_html_body_with_toc(md, true, false, 1, false);
 
     assert_eq!(toc.len(), 2);
     assert_eq!(toc[0].title, "Real Heading");
@@ -165,9 +165,51 @@ fn test_md_to_html_body_with_toc_with_frontmatter() {
 #[test]
 fn test_md_to_html_body_with_toc_code_in_heading() {
     let md = "## The `main` function";
-    let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+    let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
 
     assert_eq!(toc.len(), 1);
     assert_eq!(toc[0].title, "The main function");
     assert_eq!(toc[0].anchor_id, "the-main-function");
+}
+
+// Math integration tests
+
+#[test]
+fn test_math_inline_produces_correct_span() {
+    let md = "The formula $x^2 + y^2 = z^2$ is Pythagorean.";
+    let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+    assert!(html.contains("<span class=\"math math-inline\">"));
+    assert!(html.contains("x^2 + y^2 = z^2"));
+}
+
+#[test]
+fn test_math_display_produces_correct_span() {
+    let md = "$$\\sum_{i=0}^n x_i$$";
+    let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+    assert!(html.contains("<span class=\"math math-display\">"));
+}
+
+#[test]
+fn test_math_in_fenced_code_block_not_rendered() {
+    let md = "```\n$not math$ and $$also not$$\n```";
+    let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+    assert!(!html.contains("math-inline"));
+    assert!(!html.contains("math-display"));
+}
+
+#[test]
+fn test_build_html_math_enabled_includes_katex() {
+    let template = "<html><head></head><body>#{BODY}</body></html>";
+    let result = build_html("$x$", template, "s", "u", false, "light", true);
+    assert!(result.contains("katex.min.js"));
+    assert!(result.contains("katex.min.css"));
+    assert!(result.contains("renderMath"));
+}
+
+#[test]
+fn test_build_html_math_disabled_no_katex() {
+    let template = "<html><head></head><body>#{BODY}</body></html>";
+    let result = build_html("$x$", template, "s", "u", false, "light", false);
+    assert!(!result.contains("katex.min.js"));
+    assert!(!result.contains("renderMath"));
 }

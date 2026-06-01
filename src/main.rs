@@ -38,6 +38,10 @@ struct Cli {
     /// generate default config file at ~/.config/miprs/config.toml
     #[argh(switch)]
     initconf: bool,
+
+    /// disable math rendering
+    #[argh(switch)]
+    no_math: bool,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -49,7 +53,7 @@ pub(crate) fn port_is_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str) -> notify::Result<()> {
+fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
@@ -62,7 +66,7 @@ fn watch(path_dir: &std::path::Path, path_file: &str, temp_dir: &std::path::Path
                 if !event.paths.is_empty() {
                     let teststr = format!("{}", event.paths[0].display());
                     if teststr.contains(path_file) {
-                        mip::markdown::to_html(path_file, temp_dir, port, show_frontmatter, theme_class);
+                        mip::markdown::to_html(path_file, temp_dir, port, show_frontmatter, theme_class, math);
                     }
                 }
             },
@@ -151,6 +155,9 @@ fn main() {
     // Resolve runcmd: CLI overrides config
     let runcmd = cli.runcmd.as_deref().or_else(|| cfg.runcmd());
 
+    // CLI --no-math overrides config (flag presence means false)
+    let math = if cli.no_math { false } else { cfg.math() };
+
     let path_file = String::from(&path_file0);
 
     let s_slice = string_to_static_str(path_file0);
@@ -179,7 +186,7 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
+        mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string, math);
 
         // Run tokio runtime in a separate thread so it doesn't compete
         // with the GTK4 main loop for the main thread.
@@ -190,7 +197,7 @@ fn main() {
                     let path_parsed = Path::new(&path_file);
                     let path_dir_for_watcher = path_parsed.parent().unwrap();
 
-                    if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port, show_frontmatter, &theme_class_string) {
+                    if let Err(e) = watch(path_dir_for_watcher, &path_file, &temp_dir_for_watcher, available_port, show_frontmatter, &theme_class_string, math) {
                         println!("error: {:?}", e)
                     }
                 });
@@ -203,7 +210,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size());
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry, paragraph_numbers, paragraph_numbers_start, cfg.history_size(), math);
     }
     else{
         panic!("E2");

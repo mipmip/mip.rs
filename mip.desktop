@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MiP
+Comment=Markdown Instant Preview
+Exec=mip %f
+Icon=mip
+Terminal=false
+Type=Application
+Categories=Utility;TextEditor;
+MimeType=text/markdown;text/x-markdown;

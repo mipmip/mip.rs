@@ -180,6 +180,7 @@ pub fn md_to_html_body_with_toc(
     show_frontmatter: bool,
     paragraph_numbers: bool,
     paragraph_numbers_start: u8,
+    math: bool,
 ) -> (String, Vec<TocEntry>) {
     let matter = Matter::<YAML>::new();
     let result = matter.parse(markdown_input);
@@ -188,6 +189,9 @@ pub fn md_to_html_body_with_toc(
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_TABLES);
+    if math {
+        options.insert(Options::ENABLE_MATH);
+    }
     let parser = Parser::new_ext(&result.content, options);
 
     let mut html_output = String::new();
@@ -354,7 +358,7 @@ fn rewrite_media_embeds(html: &str) -> String {
 
 /// Convert raw markdown text to HTML body (without template wrapper).
 pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
-    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1);
+    let (html, _toc) = md_to_html_body_with_toc(markdown_input, show_frontmatter, false, 1, false);
     html
 }
 
@@ -362,6 +366,13 @@ pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
 /// This is a pure function: no I/O, no randomness.
 /// Takes markdown string, template string, seed, seed URL,
 /// show_frontmatter flag, and theme class; returns complete HTML string.
+const MATH_SCRIPTS: &str = r#"<link rel="stylesheet" href="/katex/katex.min.css">
+    <script src="/katex/katex.min.js"></script>
+    <script>
+      function renderMath(){document.querySelectorAll('.math').forEach(function(el){var math=el.textContent;var displayMode=el.classList.contains('math-display');try{katex.render(math,el,{displayMode:displayMode,throwOnError:false});}catch(e){el.textContent=math;}});}
+      document.addEventListener('DOMContentLoaded',renderMath);
+    </script>"#;
+
 pub fn build_html(
     markdown_input: &str,
     template: &str,
@@ -369,22 +380,27 @@ pub fn build_html(
     seed_url: &str,
     show_frontmatter: bool,
     theme_class: &str,
+    math: bool,
 ) -> String {
     let html_body = md_to_html_body(markdown_input, show_frontmatter);
-    template
+    let mut result = template
         .replace("#{BODY}", &html_body)
         .replace("#{INITIALSEED}", seed)
         .replace("#{SEEDURL}", seed_url)
-        .replace("#{THEME_CLASS}", theme_class)
+        .replace("#{THEME_CLASS}", theme_class);
+    if math {
+        result = result.replace("</head>", &format!("{}\n</head>", MATH_SCRIPTS));
+    }
+    result
 }
 
-pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str){
+pub fn to_html(infile: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool){
 
     let markdown_input = fs::read_to_string(infile);
-    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port, show_frontmatter, theme_class) };
+    if let Ok(markdown_input) = markdown_input { to_file(&markdown_input, output_dir, port, show_frontmatter, theme_class, math) };
 }
 
-fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str){
+fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_frontmatter: bool, theme_class: &str, math: bool){
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
 
     let seed: String = rand::rng()
@@ -397,7 +413,7 @@ fn to_file(markdown_input: &str, output_dir: &std::path::Path, port: u16, show_f
     let index_html_str = std::str::from_utf8(index_html.data.as_ref());
     match index_html_str {
         Ok(template) => {
-            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class);
+            let html_complete = build_html(markdown_input, template, &seed, &seed_url, show_frontmatter, theme_class, math);
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     eprintln!("warning: could not write seed file: {}", e);
@@ -517,7 +533,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_basic() {
         let md = "# Title\n\n## Section\n\nText\n\n### Sub";
-        let (html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0], TocEntry { level: 1, title: "Title".into(), anchor_id: "title".into() });
@@ -532,7 +548,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_skipped_levels() {
         let md = "# Top\n\n### Skipped h2\n\n## Back to h2";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
 
         assert_eq!(toc.len(), 3);
         assert_eq!(toc[0].level, 1);
@@ -543,14 +559,14 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_no_headings() {
         let md = "Just a paragraph.\n\nAnother one.";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
         assert!(toc.is_empty());
     }
 
     #[test]
     fn test_md_to_html_body_with_toc_duplicate_headings() {
         let md = "# Intro\n\n## Intro\n\n### Intro";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1, false);
 
         assert_eq!(toc[0].anchor_id, "intro");
         assert_eq!(toc[1].anchor_id, "intro-1");
@@ -560,7 +576,7 @@ mod tests {
     #[test]
     fn test_md_to_html_body_with_toc_frontmatter_excluded() {
         let md = "---\ntitle: Test\n---\n\n# Real Heading";
-        let (_html, toc) = md_to_html_body_with_toc(md, true, false, 1);
+        let (_html, toc) = md_to_html_body_with_toc(md, true, false, 1, false);
 
         assert_eq!(toc.len(), 1);
         assert_eq!(toc[0].title, "Real Heading");
@@ -621,7 +637,7 @@ mod tests {
     #[test]
     fn test_section_numbers_with_toc_integration() {
         let md = "# Title\n\n## First\n\n### Sub\n\n## Second";
-        let (_html, toc) = md_to_html_body_with_toc(md, false, true, 2);
+        let (_html, toc) = md_to_html_body_with_toc(md, false, true, 2, false);
         // H1 has no number, H2 starts at 1
         assert_eq!(toc[0].title, "Title"); // no number
         assert_eq!(toc[1].title, "1 First");
@@ -632,8 +648,57 @@ mod tests {
     #[test]
     fn test_section_numbers_in_html() {
         let md = "# Heading One\n\n## Heading Two";
-        let (html, _toc) = md_to_html_body_with_toc(md, false, true, 1);
+        let (html, _toc) = md_to_html_body_with_toc(md, false, true, 1, false);
         assert!(html.contains("<span class=\"section-number\">1</span> Heading One"));
         assert!(html.contains("<span class=\"section-number\">1.1</span> Heading Two"));
+    }
+
+    // Math rendering tests
+
+    #[test]
+    fn test_math_inline_produces_span() {
+        let md = "The formula $x^2 + y^2 = z^2$ is well known.";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+        assert!(html.contains("<span class=\"math math-inline\">"));
+        assert!(html.contains("x^2 + y^2 = z^2"));
+    }
+
+    #[test]
+    fn test_math_display_produces_span() {
+        let md = "$$\\int_0^\\infty e^{-x} dx = 1$$";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+        assert!(html.contains("<span class=\"math math-display\">"));
+    }
+
+    #[test]
+    fn test_math_disabled_no_spans() {
+        let md = "The formula $x^2$ and $$y^2$$ should not be math.";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, false);
+        assert!(!html.contains("math-inline"));
+        assert!(!html.contains("math-display"));
+    }
+
+    #[test]
+    fn test_math_in_code_block_not_rendered() {
+        let md = "```\n$not math$\n$$also not math$$\n```";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+        assert!(!html.contains("math-inline"));
+        assert!(!html.contains("math-display"));
+    }
+
+    #[test]
+    fn test_math_in_inline_code_not_rendered() {
+        let md = "Use `$variable` in your code.";
+        let (html, _toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+        assert!(!html.contains("math-inline"));
+    }
+
+    #[test]
+    fn test_math_in_heading_toc_plain() {
+        let md = "# The $E = mc^2$ equation";
+        let (_html, toc) = md_to_html_body_with_toc(md, false, false, 1, true);
+        assert_eq!(toc.len(), 1);
+        // TOC title should have plain text only (no raw TeX)
+        assert_eq!(toc[0].title, "The  equation");
     }
 }

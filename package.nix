@@ -24,6 +24,13 @@ pkgs.rustPlatform.buildRustPackage rec {
     gst_all_1.gst-plugins-bad
   ];
 
+  postInstall = ''
+    mkdir -p $out/share/icons/hicolor/scalable/apps
+    cp icons/mip-icon.svg $out/share/icons/hicolor/scalable/apps/mip.svg
+    mkdir -p $out/share/applications
+    cp mip.desktop $out/share/applications/mip.desktop
+  '';
+
   preFixup = ''
     gappsWrapperArgs+=(
       --prefix GST_PLUGIN_PATH : "${pkgs.gst_all_1.gstreamer}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0:${pkgs.gst_all_1.gst-plugins-bad}/lib/gstreamer-1.0"

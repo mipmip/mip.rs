@@ -1,7 +1,7 @@
 ---
 # mip.rs-vaoq
 title: search /
-status: draft
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-05-29T13:42:25Z

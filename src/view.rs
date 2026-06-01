@@ -398,7 +398,7 @@ fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse:
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize) {
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry, paragraph_numbers: bool, paragraph_numbers_start: u8, history_size: usize, math: bool) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
     let runcmd = runcmd.map(|s| s.to_string());
@@ -409,6 +409,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
     let history = std::rc::Rc::new(std::cell::RefCell::new(
         crate::history::CommandHistory::load(&history_path, history_size),
     ));
+    let _ = gtk4::init();
+    gtk4::Window::set_default_icon_name("mip");
     let app = Application::builder()
         .application_id("org.mipmip.mip")
         .build();
@@ -459,7 +461,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         // Extract initial TOC
         let infile_path = infile.clone();
         let initial_toc = if let Ok(md_content) = std::fs::read_to_string(&infile_path) {
-            let (_html, toc) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter, paragraph_numbers, paragraph_numbers_start);
+            let (_html, toc) = crate::markdown::md_to_html_body_with_toc(&md_content, show_frontmatter, paragraph_numbers, paragraph_numbers_start, math);
             toc
         } else {
             Vec::new()
@@ -1014,7 +1016,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         let sf = ctx_for_poll.settings.frontmatter.get();
                         let pn = ctx_for_poll.settings.paragraph_numbers.get();
                         let pns = ctx_for_poll.settings.paragraph_numbers_start.get();
-                        let (html_body, toc_entries) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns);
+                        let (html_body, toc_entries) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns, math);
 
                         // Only update WebView if content actually changed
                         if html_body != last_html_body {
@@ -1023,7 +1025,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                                 .replace('`', "\\`")
                                 .replace("${", "\\${");
                             let js = format!(
-                                "document.querySelector('.section').innerHTML = `{}`;",
+                                "document.querySelector('.section').innerHTML = `{}`;if(typeof renderMath==='function')renderMath();",
                                 escaped
                             );
                             webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
