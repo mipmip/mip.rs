@@ -3,7 +3,11 @@
 
 const COMMANDS: &[&str] = &[
     "close", "document_focus", "o", "open", "print", "q",
-    "quicktoc", "set",
+    "quicktoc",
+    "scroll_bottom", "scroll_down", "scroll_half_down", "scroll_half_up",
+    "scroll_next_heading", "scroll_page_down", "scroll_page_up",
+    "scroll_prev_heading", "scroll_top", "scroll_up",
+    "set",
     "sidetoc_close", "sidetoc_expand_width", "sidetoc_focus", "sidetoc_open",
     "sidetoc_shrink_width", "sidetoc_toggle",
     "zoom_in", "zoom_out", "zoom_reset",
@@ -314,9 +318,44 @@ pub fn keyval_to_name(keyval: u32) -> Option<String> {
     Some(name.to_string())
 }
 
-/// A keybinding registry mapping key combos to command strings.
+/// Result of looking up a key in the registry.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LookupResult<'a> {
+    /// A single-combo binding: execute immediately.
+    Command(&'a str),
+    /// The key is the first key of one or more sequences: enter pending state.
+    SequencePrefix,
+    /// No binding found.
+    None,
+}
+
+/// What a key maps to internally.
+#[derive(Debug, Clone)]
+enum BindingAction {
+    Command(String),
+    SequencePrefix(std::collections::HashMap<KeyCombo, String>),
+}
+
+/// A keybinding registry mapping key combos to command strings,
+/// with support for two-key sequences like "g,g".
 pub struct KeybindingRegistry {
-    bindings: std::collections::HashMap<KeyCombo, String>,
+    bindings: std::collections::HashMap<KeyCombo, BindingAction>,
+}
+
+/// Parse a binding string that may be a single combo ("ctrl+p") or a
+/// comma-separated sequence ("g,g", "ctrl+g,g"). Returns None if any
+/// key in the string is invalid.
+pub fn parse_binding_str(s: &str) -> Option<Vec<KeyCombo>> {
+    let parts: Vec<&str> = s.split(',').collect();
+    let mut combos = Vec::with_capacity(parts.len());
+    for part in parts {
+        combos.push(parse_key_combo(part.trim())?);
+    }
+    if combos.is_empty() {
+        None
+    } else {
+        Some(combos)
+    }
 }
 
 impl KeybindingRegistry {
@@ -334,23 +373,101 @@ impl KeybindingRegistry {
         registry.register_str("ctrl+=", "zoom_in");
         registry.register_str("ctrl+-", "zoom_out");
         registry.register_str("ctrl+0", "zoom_reset");
+        // Vim-style scroll navigation
+        registry.register_str("j", "scroll_down");
+        registry.register_str("k", "scroll_up");
+        registry.register_str("down", "scroll_down");
+        registry.register_str("up", "scroll_up");
+        registry.register_str("ctrl+f", "scroll_page_down");
+        registry.register_str("ctrl+b", "scroll_page_up");
+        registry.register_str("pagedown", "scroll_page_down");
+        registry.register_str("pageup", "scroll_page_up");
+        registry.register_str("ctrl+d", "scroll_half_down");
+        registry.register_str("ctrl+u", "scroll_half_up");
+        registry.register_str("home", "scroll_top");
+        registry.register_str("end", "scroll_bottom");
+        registry.register_str("shift+g", "scroll_bottom");
+        registry.register_str("g,g", "scroll_top");
+        registry.register_str("n", "scroll_next_heading");
+        registry.register_str("shift+n", "scroll_prev_heading");
         registry
     }
 
-    /// Register a keybinding from string key combo.
+    /// Register a keybinding from string key combo (single or sequence).
     pub fn register_str(&mut self, combo_str: &str, command: &str) {
-        if let Some(combo) = parse_key_combo(combo_str) {
-            self.bindings.insert(combo, command.to_string());
-        } else {
+        let Some(combos) = parse_binding_str(combo_str) else {
             eprintln!("warning: invalid keybinding '{}', skipping", combo_str);
+            return;
+        };
+
+        if combos.len() == 1 {
+            // Single combo binding
+            let combo = combos.into_iter().next().unwrap();
+            // If there's already a SequencePrefix here, the single binding
+            // becomes unreachable — warn but still store as sequence prefix
+            // takes priority at lookup time. Actually per spec: sequence prefix
+            // takes priority, so don't overwrite a SequencePrefix with a Command.
+            match self.bindings.get(&combo) {
+                Some(BindingAction::SequencePrefix(_)) => {
+                    eprintln!("warning: keybinding '{}' conflicts with a sequence prefix, single binding will be unreachable", combo_str);
+                }
+                _ => {
+                    self.bindings.insert(combo, BindingAction::Command(command.to_string()));
+                }
+            }
+        } else if combos.len() == 2 {
+            // Two-key sequence
+            let first = combos[0].clone();
+            let second = combos[1].clone();
+
+            // Replace any existing single Command on the first key with a SequencePrefix
+            let action = self.bindings.entry(first).or_insert_with(|| {
+                BindingAction::SequencePrefix(std::collections::HashMap::new())
+            });
+
+            match action {
+                BindingAction::Command(_) => {
+                    // Upgrade to sequence prefix, old single binding becomes unreachable
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(second, command.to_string());
+                    *action = BindingAction::SequencePrefix(map);
+                }
+                BindingAction::SequencePrefix(map) => {
+                    map.insert(second, command.to_string());
+                }
+            }
+        } else {
+            eprintln!("warning: sequences longer than 2 keys not supported: '{}'", combo_str);
         }
     }
 
-    /// Look up a command by keyval and modifier state.
-    pub fn lookup(&self, keyval: u32, ctrl: bool, shift: bool, alt: bool, super_: bool) -> Option<&str> {
-        let key = keyval_to_name(keyval)?;
+    /// Look up what a key combo maps to.
+    pub fn lookup(&self, keyval: u32, ctrl: bool, shift: bool, alt: bool, super_: bool) -> LookupResult<'_> {
+        let Some(key) = keyval_to_name(keyval) else {
+            return LookupResult::None;
+        };
         let combo = KeyCombo { key, ctrl, shift, alt, super_ };
-        self.bindings.get(&combo).map(|s| s.as_str())
+        match self.bindings.get(&combo) {
+            Some(BindingAction::Command(cmd)) => LookupResult::Command(cmd),
+            Some(BindingAction::SequencePrefix(_)) => LookupResult::SequencePrefix,
+            None => LookupResult::None,
+        }
+    }
+
+    /// Look up the second key of a sequence. Returns the command if the
+    /// (first, second) pair is a registered sequence.
+    pub fn lookup_sequence(&self, first_keyval: u32, first_ctrl: bool, first_shift: bool, first_alt: bool, first_super: bool,
+                           second_keyval: u32, second_ctrl: bool, second_shift: bool, second_alt: bool, second_super: bool) -> Option<&str> {
+        let first_key = keyval_to_name(first_keyval)?;
+        let first = KeyCombo { key: first_key, ctrl: first_ctrl, shift: first_shift, alt: first_alt, super_: first_super };
+        let second_key = keyval_to_name(second_keyval)?;
+        let second = KeyCombo { key: second_key, ctrl: second_ctrl, shift: second_shift, alt: second_alt, super_: second_super };
+
+        if let Some(BindingAction::SequencePrefix(map)) = self.bindings.get(&first) {
+            map.get(&second).map(|s| s.as_str())
+        } else {
+            None
+        }
     }
 
     /// Register all keybindings from a config HashMap, overriding defaults.
@@ -701,29 +818,42 @@ mod tests {
     fn test_registry_defaults() {
         let reg = KeybindingRegistry::with_defaults();
         // Tab -> quicktoc
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), Some("quicktoc"));
+        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("quicktoc"));
         // Ctrl+P -> print
-        assert_eq!(reg.lookup(0x070, true, false, false, false), Some("print"));
+        assert_eq!(reg.lookup(0x070, true, false, false, false), LookupResult::Command("print"));
+        // j -> scroll_down
+        assert_eq!(reg.lookup(0x06a, false, false, false, false), LookupResult::Command("scroll_down"));
+        // k -> scroll_up
+        assert_eq!(reg.lookup(0x06b, false, false, false, false), LookupResult::Command("scroll_up"));
+        // g -> sequence prefix (for g,g)
+        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        // g,g -> scroll_top
+        assert_eq!(
+            reg.lookup_sequence(0x067, false, false, false, false, 0x067, false, false, false, false),
+            Some("scroll_top")
+        );
+        // shift+g -> scroll_bottom
+        assert_eq!(reg.lookup(0x067, false, true, false, false), LookupResult::Command("scroll_bottom"));
     }
 
     #[test]
     fn test_registry_lookup_miss() {
         let reg = KeybindingRegistry::with_defaults();
-        assert_eq!(reg.lookup(0x061, false, false, false, false), None); // 'a' not bound
+        assert_eq!(reg.lookup(0x061, false, false, false, false), LookupResult::None); // 'a' not bound
     }
 
     #[test]
     fn test_registry_override() {
         let mut reg = KeybindingRegistry::with_defaults();
         reg.register_str("tab", "sidetoc_toggle");
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), Some("sidetoc_toggle"));
+        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("sidetoc_toggle"));
     }
 
     #[test]
     fn test_registry_custom_binding() {
         let mut reg = KeybindingRegistry::new();
         reg.register_str("ctrl+y", "open ~/todo.md");
-        assert_eq!(reg.lookup(0x079, true, false, false, false), Some("open ~/todo.md"));
+        assert_eq!(reg.lookup(0x079, true, false, false, false), LookupResult::Command("open ~/todo.md"));
     }
 
     #[test]
@@ -733,8 +863,97 @@ mod tests {
         config_bindings.insert("tab".to_string(), "sidetoc_toggle".to_string());
         config_bindings.insert("ctrl+b".to_string(), "quicktoc".to_string());
         reg.register_from_config(&config_bindings);
-        assert_eq!(reg.lookup(0xff09, false, false, false, false), Some("sidetoc_toggle"));
-        assert_eq!(reg.lookup(0x062, true, false, false, false), Some("quicktoc"));
+        assert_eq!(reg.lookup(0xff09, false, false, false, false), LookupResult::Command("sidetoc_toggle"));
+        assert_eq!(reg.lookup(0x062, true, false, false, false), LookupResult::Command("quicktoc"));
+    }
+
+    // parse_binding_str tests
+    #[test]
+    fn test_parse_binding_str_single() {
+        let combos = parse_binding_str("ctrl+p").unwrap();
+        assert_eq!(combos.len(), 1);
+        assert_eq!(combos[0].key, "p");
+        assert!(combos[0].ctrl);
+    }
+
+    #[test]
+    fn test_parse_binding_str_sequence() {
+        let combos = parse_binding_str("g,g").unwrap();
+        assert_eq!(combos.len(), 2);
+        assert_eq!(combos[0].key, "g");
+        assert_eq!(combos[1].key, "g");
+        assert!(!combos[0].ctrl && !combos[1].ctrl);
+    }
+
+    #[test]
+    fn test_parse_binding_str_sequence_with_modifier() {
+        let combos = parse_binding_str("ctrl+g,g").unwrap();
+        assert_eq!(combos.len(), 2);
+        assert_eq!(combos[0].key, "g");
+        assert!(combos[0].ctrl);
+        assert_eq!(combos[1].key, "g");
+        assert!(!combos[1].ctrl);
+    }
+
+    #[test]
+    fn test_parse_binding_str_invalid() {
+        assert!(parse_binding_str("xyzkey").is_none());
+        assert!(parse_binding_str("g,xyzkey").is_none());
+    }
+
+    // Sequence registry tests
+    #[test]
+    fn test_registry_sequence_register_and_lookup() {
+        let mut reg = KeybindingRegistry::new();
+        reg.register_str("g,g", "scroll_top");
+        // g is a sequence prefix
+        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        // g,g -> scroll_top
+        assert_eq!(
+            reg.lookup_sequence(0x067, false, false, false, false, 0x067, false, false, false, false),
+            Some("scroll_top")
+        );
+        // g,k -> None (not registered)
+        assert_eq!(
+            reg.lookup_sequence(0x067, false, false, false, false, 0x06b, false, false, false, false),
+            None
+        );
+    }
+
+    #[test]
+    fn test_registry_sequence_overrides_single() {
+        let mut reg = KeybindingRegistry::new();
+        reg.register_str("g", "some_command");
+        // Now register a sequence starting with g — it should upgrade to SequencePrefix
+        reg.register_str("g,g", "scroll_top");
+        // g is now a sequence prefix, not a direct command
+        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+    }
+
+    #[test]
+    fn test_registry_mixed_single_and_sequence() {
+        let mut reg = KeybindingRegistry::new();
+        reg.register_str("j", "scroll_down");
+        reg.register_str("g,g", "scroll_top");
+        // j is still a direct command
+        assert_eq!(reg.lookup(0x06a, false, false, false, false), LookupResult::Command("scroll_down"));
+        // g is a sequence prefix
+        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+    }
+
+    #[test]
+    fn test_registry_config_with_sequence() {
+        let mut reg = KeybindingRegistry::new();
+        let mut config = std::collections::HashMap::new();
+        config.insert("g,g".to_string(), "scroll_top".to_string());
+        config.insert("z,z".to_string(), "center_screen".to_string());
+        reg.register_from_config(&config);
+        assert_eq!(reg.lookup(0x067, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(reg.lookup(0x07a, false, false, false, false), LookupResult::SequencePrefix);
+        assert_eq!(
+            reg.lookup_sequence(0x07a, false, false, false, false, 0x07a, false, false, false, false),
+            Some("center_screen")
+        );
     }
 
     // match_settings tests

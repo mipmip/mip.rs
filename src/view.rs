@@ -270,6 +270,42 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
         "zoom_reset" => {
             ctx.webview.set_zoom_level(1.0);
         }
+        "scroll_down" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, 60)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_up" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, -60)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_page_down" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, window.innerHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_page_up" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, -window.innerHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_half_down" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, window.innerHeight/2)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_half_up" => {
+            ctx.webview.evaluate_javascript("window.scrollBy(0, -window.innerHeight/2)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_top" => {
+            ctx.webview.evaluate_javascript("window.scrollTo(0, 0)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_bottom" => {
+            ctx.webview.evaluate_javascript("window.scrollTo(0, document.body.scrollHeight)", None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+        }
+        "scroll_next_heading" => {
+            ctx.webview.evaluate_javascript(
+                "(function(){var h=document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');var y=window.scrollY+10;for(var i=0;i<h.length;i++){if(h[i].offsetTop>y){h[i].scrollIntoView({behavior:'instant'});return;}}})()",
+                None, None, None::<&gtk4::gio::Cancellable>, |_| {},
+            );
+        }
+        "scroll_prev_heading" => {
+            ctx.webview.evaluate_javascript(
+                "(function(){var h=document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');var y=window.scrollY-10;for(var i=h.length-1;i>=0;i--){if(h[i].offsetTop<y){h[i].scrollIntoView({behavior:'instant'});return;}}})()",
+                None, None, None::<&gtk4::gio::Cancellable>, |_| {},
+            );
+        }
         _ => {}
     }
 }
@@ -598,20 +634,34 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         }
 
         // Window key handler: `:` opens command bar, other keys check keybinding registry
+        // Includes pending-key state for two-key sequences (e.g. g,g)
         {
             let cmd_entry_for_keys = cmd_entry.clone();
             let registry = keybinding_registry.clone();
             let ctx_for_keys = cmd_ctx.clone();
+            let pending_key: std::rc::Rc<std::cell::Cell<Option<(u32, bool, bool, bool, bool, std::time::Instant)>>> =
+                std::rc::Rc::new(std::cell::Cell::new(None));
+            let pending_for_cmd = pending_key.clone();
             let key_controller_cmd = gtk4::EventControllerKey::new();
             key_controller_cmd.set_propagation_phase(gtk4::PropagationPhase::Capture);
             key_controller_cmd.connect_key_pressed(move |_, keyval, _keycode, state| {
                 // Skip when command bar is visible (all keys go to entry)
                 if gtk4::prelude::WidgetExt::is_visible(&cmd_entry_for_keys) {
+                    pending_key.set(None);
                     return glib::Propagation::Proceed;
+                }
+
+                // Skip when a TreeView is focused (let TreeView j/k handlers work)
+                if let Some(focus_widget) = gtk4::prelude::GtkWindowExt::focus(&ctx_for_keys.window) {
+                    if focus_widget.type_().name() == "GtkTreeView" {
+                        pending_key.set(None);
+                        return glib::Propagation::Proceed;
+                    }
                 }
 
                 // `:` always opens command bar (not rebindable)
                 if keyval == gtk4::gdk::Key::colon {
+                    pending_key.set(None);
                     cmd_entry_for_keys.set_text(":");
                     cmd_entry_for_keys.set_visible(true);
                     cmd_entry_for_keys.grab_focus();
@@ -623,21 +673,56 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                     return glib::Propagation::Stop;
                 }
 
-                // Look up keybinding
                 let ctrl = state.contains(gtk4::gdk::ModifierType::CONTROL_MASK);
                 let shift = state.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
                 let alt = state.contains(gtk4::gdk::ModifierType::ALT_MASK);
                 let super_ = state.contains(gtk4::gdk::ModifierType::SUPER_MASK);
+                let kv = keyval.into_glib();
 
-                if let Some(command) = registry.lookup(keyval.into_glib(), ctrl, shift, alt, super_) {
-                    let command = command.to_string();
-                    execute_commands(&command, &ctx_for_keys);
-                    return glib::Propagation::Stop;
+                // Check pending key state for sequences
+                if let Some((prev_kv, prev_ctrl, prev_shift, prev_alt, prev_super, instant)) = pending_key.get() {
+                    pending_key.set(None);
+                    if instant.elapsed() < std::time::Duration::from_millis(500) {
+                        if let Some(command) = registry.lookup_sequence(
+                            prev_kv, prev_ctrl, prev_shift, prev_alt, prev_super,
+                            kv, ctrl, shift, alt, super_,
+                        ) {
+                            let command = command.to_string();
+                            execute_commands(&command, &ctx_for_keys);
+                            return glib::Propagation::Stop;
+                        }
+                    }
+                    // Sequence didn't match or timed out — fall through to process current key fresh
                 }
 
-                glib::Propagation::Proceed
+                // Look up keybinding
+                match registry.lookup(kv, ctrl, shift, alt, super_) {
+                    crate::command::LookupResult::Command(command) => {
+                        let command = command.to_string();
+                        execute_commands(&command, &ctx_for_keys);
+                        glib::Propagation::Stop
+                    }
+                    crate::command::LookupResult::SequencePrefix => {
+                        pending_key.set(Some((kv, ctrl, shift, alt, super_, std::time::Instant::now())));
+                        glib::Propagation::Stop
+                    }
+                    crate::command::LookupResult::None => {
+                        glib::Propagation::Proceed
+                    }
+                }
             });
             window_ref.add_controller(key_controller_cmd);
+
+            // Clear pending key when command bar becomes visible
+            {
+                let pending_for_visibility = pending_for_cmd;
+                let cmd_entry_watch = cmd_entry.clone();
+                cmd_entry_watch.connect_notify_local(Some("visible"), move |entry, _| {
+                    if gtk4::prelude::WidgetExt::is_visible(entry) {
+                        pending_for_visibility.set(None);
+                    }
+                });
+            }
         }
 
         // Command bar: Enter executes (use activate signal — more reliable than key handler)
