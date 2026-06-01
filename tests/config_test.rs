@@ -35,9 +35,7 @@ fn test_load_from_missing_file() {
 fn test_load_from_invalid_theme_falls_back() {
     let file = write_temp_config("theme = \"neon\"\nfrontmatter = true\n");
     let cfg = Config::load_from(file.path());
-    // Invalid theme falls back to default ("system")
     assert_eq!(cfg.theme(), "system");
-    // But frontmatter is preserved
     assert!(cfg.frontmatter());
 }
 
@@ -65,36 +63,81 @@ fn test_load_from_system_theme() {
 }
 
 #[test]
-fn test_load_from_toc_side() {
-    let file = write_temp_config("toc = \"side\"\n");
+fn test_load_from_runcmd() {
+    let file = write_temp_config("runcmd = \"sidetoc_open\"\n");
     let cfg = Config::load_from(file.path());
-    assert_eq!(cfg.toc(), "side");
+    assert_eq!(cfg.runcmd(), Some("sidetoc_open"));
 }
 
 #[test]
-fn test_load_from_toc_zathura() {
-    let file = write_temp_config("toc = \"zathura\"\n");
-    let cfg = Config::load_from(file.path());
-    assert_eq!(cfg.toc(), "zathura");
-}
-
-#[test]
-fn test_load_from_toc_off() {
-    let file = write_temp_config("toc = \"off\"\n");
-    let cfg = Config::load_from(file.path());
-    assert_eq!(cfg.toc(), "off");
-}
-
-#[test]
-fn test_load_from_toc_invalid_falls_back() {
-    let file = write_temp_config("toc = \"floating\"\n");
-    let cfg = Config::load_from(file.path());
-    assert_eq!(cfg.toc(), "off");
-}
-
-#[test]
-fn test_load_from_toc_missing_defaults_to_off() {
+fn test_load_from_runcmd_missing() {
     let file = write_temp_config("theme = \"dark\"\n");
     let cfg = Config::load_from(file.path());
-    assert_eq!(cfg.toc(), "off");
+    assert_eq!(cfg.runcmd(), None);
+}
+
+#[test]
+fn test_load_from_sidetoc_width() {
+    let file = write_temp_config("sidetoc_width = 300\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.sidetoc_width(), 300);
+}
+
+#[test]
+fn test_load_from_sidetoc_width_default() {
+    let file = write_temp_config("");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.sidetoc_width(), 250);
+}
+
+#[test]
+fn test_load_from_sidetoc_position_right() {
+    let file = write_temp_config("sidetoc_position = \"right\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.sidetoc_position(), "right");
+}
+
+#[test]
+fn test_load_from_sidetoc_position_invalid() {
+    let file = write_temp_config("sidetoc_position = \"top\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.sidetoc_position(), "left");
+}
+
+#[test]
+fn test_load_from_sidetoc_position_default() {
+    let file = write_temp_config("");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.sidetoc_position(), "left");
+}
+
+// initconf template tests
+
+#[test]
+fn test_default_config_template_contains_all_settings() {
+    let template = mip::config::default_config_template();
+    // All Config struct field names should appear in the template
+    assert!(template.contains("theme"));
+    assert!(template.contains("frontmatter"));
+    assert!(template.contains("runcmd"));
+    assert!(template.contains("sidetoc_width"));
+    assert!(template.contains("sidetoc_position"));
+    assert!(template.contains("[keybindings]"));
+}
+
+#[test]
+fn test_default_config_template_is_valid_toml() {
+    let template = mip::config::default_config_template();
+    let result: Result<toml::Value, _> = toml::from_str(template);
+    assert!(result.is_ok(), "Template is not valid TOML: {:?}", result.err());
+}
+
+#[test]
+fn test_default_config_template_parses_to_config() {
+    let template = mip::config::default_config_template();
+    let cfg = Config::load_from_str(template);
+    assert_eq!(cfg.theme(), "system");
+    assert!(!cfg.frontmatter());
+    assert_eq!(cfg.sidetoc_width(), 250);
+    assert_eq!(cfg.sidetoc_position(), "left");
 }

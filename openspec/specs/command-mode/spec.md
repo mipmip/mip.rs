@@ -78,3 +78,62 @@ The system SHALL style the command bar with grey background, no borders, no roun
 #### Scenario: Visual appearance
 - **WHEN** the command bar is visible
 - **THEN** it SHALL have a flat grey background, monospace font, and no decorative borders or focus indicators
+
+### Requirement: Command name completion
+The system SHALL complete partial command names when Tab is pressed and the text contains no space (no argument yet).
+
+#### Scenario: Unique command prefix
+- **WHEN** the user types `:op` and presses Tab
+- **THEN** the system SHALL complete to `:open ` (with trailing space)
+
+#### Scenario: Ambiguous command prefix
+- **WHEN** the user types `:c` and presses Tab
+- **THEN** the system SHALL complete to `:close ` (unique match for `c` prefix)
+
+#### Scenario: Multiple command matches
+- **WHEN** the user types `:o` and presses Tab
+- **THEN** the system SHALL show wildmenu with `o` and `open`, completing to the first match
+
+### Requirement: Sidetoc commands
+The system SHALL support commands to control the side table of contents panel.
+
+#### Scenario: Open sidetoc
+- **WHEN** the user executes `sidetoc_open`
+- **THEN** the system SHALL show the sidetoc panel
+
+#### Scenario: Close sidetoc
+- **WHEN** the user executes `sidetoc_close`
+- **THEN** the system SHALL hide the sidetoc panel
+
+#### Scenario: Toggle sidetoc
+- **WHEN** the user executes `sidetoc_toggle`
+- **THEN** the system SHALL show the sidetoc if hidden, or hide it if visible
+
+#### Scenario: Expand sidetoc width
+- **WHEN** the user executes `sidetoc_expand_width`
+- **THEN** the system SHALL increase the sidetoc panel width by a step
+
+#### Scenario: Shrink sidetoc width
+- **WHEN** the user executes `sidetoc_shrink_width`
+- **THEN** the system SHALL decrease the sidetoc panel width by a step
+
+### Requirement: Quicktoc command
+The system SHALL support a command to toggle the full-screen quick table of contents view.
+
+#### Scenario: Toggle quicktoc
+- **WHEN** the user executes `quicktoc`
+- **THEN** the system SHALL toggle between the document view and the TOC view (Stack switch)
+
+### Requirement: Command composition with semicolon
+The system SHALL support executing multiple commands separated by `;`.
+
+#### Scenario: Multiple commands
+- **WHEN** the user enters `sidetoc_open; set theme dark`
+- **THEN** the system SHALL execute `sidetoc_open` and then `set theme dark` in sequence
+
+### Requirement: No colon prefix in command strings
+Command names SHALL NOT include a colon prefix. The `:` is the command bar activation key only.
+
+#### Scenario: Internal command format
+- **WHEN** a command is executed from any source (command bar, --runcmd, keybinding)
+- **THEN** the command string SHALL be without colon prefix (e.g. `open foo.md`, not `:open foo.md`)

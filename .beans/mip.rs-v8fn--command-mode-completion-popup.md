@@ -1,11 +1,12 @@
 ---
 # mip.rs-v8fn
 title: "command mode: completion popup and command name completion"
-status: draft
+status: completed
 type: task
 priority: normal
 created_at: 2026-06-01T00:00:00Z
-updated_at: 2026-06-01T00:00:00Z
+updated_at: 2026-06-01T12:00:00Z
+openspec-link: openspec/changes/archive/2026-06-01-completion-popup
 ---
 
 Two improvements to command mode completion:

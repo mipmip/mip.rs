@@ -1,4 +1,4 @@
-Coverage: 41%
+Coverage: 46%
 
 # Markdown Instant Preview - Rust edition
 
@@ -47,7 +47,7 @@ Binaries for macOS and Windows (v0.2.3 and earlier) can be downloaded from the
 
 ## Usage
 
-```
+```bash
 mip [markdown file]
 ```
 

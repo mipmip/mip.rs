@@ -31,9 +31,13 @@ struct Cli {
     #[argh(option)]
     theme: Option<String>,
 
-    /// table of contents mode: side, zathura, or off
+    /// run command(s) at startup (e.g. "sidetoc_open")
     #[argh(option)]
-    toc: Option<String>,
+    runcmd: Option<String>,
+
+    /// generate default config file at ~/.config/miprs/config.toml
+    #[argh(switch)]
+    initconf: bool,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -80,6 +84,31 @@ fn main() {
         process::exit(0);
     }
 
+    if cli.initconf {
+        let path = mip::config::config_path();
+        if path.exists() {
+            eprintln!("Config file already exists at {}", path.display());
+            eprintln!("Back it up first if you want to regenerate.");
+            process::exit(1);
+        }
+        if let Some(parent) = path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                eprintln!("error: could not create directory {}: {}", parent.display(), e);
+                process::exit(1);
+            }
+        }
+        match fs::write(&path, mip::config::default_config_template()) {
+            Ok(_) => {
+                println!("Config file created at {}", path.display());
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("error: could not write config file: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
     let path_file0 = match cli.file {
         Some(p) => p.to_str().unwrap().to_string(),
         None => {
@@ -119,15 +148,8 @@ fn main() {
     // CLI --frontmatter overrides config (flag presence means true)
     let show_frontmatter = if cli.frontmatter { true } else { cfg.frontmatter() };
 
-    let toc_mode = if let Some(ref t) = cli.toc {
-        if !["side", "zathura", "off"].contains(&t.as_str()) {
-            eprintln!("error: invalid toc mode '{}'. Must be side, zathura, or off.", t);
-            process::exit(1);
-        }
-        t.as_str()
-    } else {
-        cfg.toc()
-    };
+    // Resolve runcmd: CLI overrides config
+    let runcmd = cli.runcmd.as_deref().or_else(|| cfg.runcmd());
 
     let path_file = String::from(&path_file0);
 
@@ -144,6 +166,15 @@ fn main() {
     let temp_dir_for_watcher = temp_dir.clone();
     let theme_class_string = theme_class.to_string();
     let path_file_for_view = path_file.clone();
+    let runcmd_string = runcmd.map(|s| s.to_string());
+    let sidetoc_width = cfg.sidetoc_width();
+    let sidetoc_position = cfg.sidetoc_position().to_string();
+
+    // Build keybinding registry: defaults + config overrides
+    let mut keybinding_registry = mip::command::KeybindingRegistry::with_defaults();
+    if let Some(ref kb) = cfg.keybindings {
+        keybinding_registry.register_from_config(kb);
+    }
 
     if let Some(available_port) = get_available_port() {
         mip::markdown::to_html(&path_file, &temp_dir, available_port, show_frontmatter, &theme_class_string);
@@ -170,7 +201,7 @@ fn main() {
             });
         });
 
-        mip::view::window(available_port, temp_dir, show_frontmatter, theme, toc_mode, &path_file_for_view);
+        mip::view::window(available_port, temp_dir, show_frontmatter, theme, &path_file_for_view, runcmd_string.as_deref(), sidetoc_width, &sidetoc_position, keybinding_registry);
     }
     else{
         panic!("E2");

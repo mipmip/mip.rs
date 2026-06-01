@@ -3,6 +3,7 @@ use std::net::TcpStream;
 
 use gtk4::prelude::*;
 use gtk4::prelude::TreeViewExt;
+use gtk4::glib::translate::IntoGlib;
 use gtk4::{Application, ApplicationWindow, ScrolledWindow, Paned, Orientation, Stack};
 use gtk4::glib;
 use webkit6::prelude::*;
@@ -108,112 +109,189 @@ fn scroll_to_anchor(webview: &WebView, anchor_id: &str) {
     webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
 }
 
-fn expand_tilde(path: &str) -> String {
-    if path.starts_with('~') {
-        let home = std::env::var("HOME").unwrap_or_default();
-        format!("{}{}", home, &path[1..])
-    } else {
-        path.to_string()
-    }
+const SIDETOC_WIDTH_STEP: i32 = 50;
+
+struct CommandContext {
+    app: Application,
+    window: ApplicationWindow,
+    paned: Paned,
+    stack: Stack,
+    webview: WebView,
+    sidetoc_right: bool,
+    sidetoc_width: i32,
+    sidetoc_open: std::cell::Cell<bool>,
 }
 
-fn execute_command(cmd: &str, arg: &str, app: &Application) {
+fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
     match cmd {
         "q" | "close" => {
-            app.quit();
+            ctx.app.quit();
         }
         "open" | "o" => {
             if !arg.is_empty() {
-                let path = expand_tilde(arg);
+                let path = crate::command::expand_tilde(arg);
                 let path = std::path::Path::new(&path);
                 if path.exists() {
-                    // For now, open in a new mip process
                     let _ = std::process::Command::new(std::env::current_exe().unwrap())
                         .arg(path)
                         .spawn();
-                    app.quit();
+                    ctx.app.quit();
                 }
             }
         }
-        _ => {} // Unknown command — silently ignore
+        "sidetoc_open" => {
+            if ctx.sidetoc_right {
+                let total = ctx.window.width();
+                ctx.paned.set_position(total - ctx.sidetoc_width);
+            } else {
+                ctx.paned.set_position(ctx.sidetoc_width);
+            }
+            ctx.sidetoc_open.set(true);
+        }
+        "sidetoc_close" => {
+            if ctx.sidetoc_right {
+                ctx.paned.set_position(ctx.window.width());
+            } else {
+                ctx.paned.set_position(0);
+            }
+            ctx.sidetoc_open.set(false);
+        }
+        "sidetoc_toggle" => {
+            if ctx.sidetoc_open.get() {
+                execute_command("sidetoc_close", "", ctx);
+            } else {
+                execute_command("sidetoc_open", "", ctx);
+            }
+        }
+        "sidetoc_expand_width" => {
+            let pos = ctx.paned.position();
+            if ctx.sidetoc_right {
+                ctx.paned.set_position((pos - SIDETOC_WIDTH_STEP).max(0));
+            } else {
+                ctx.paned.set_position(pos + SIDETOC_WIDTH_STEP);
+            }
+        }
+        "sidetoc_shrink_width" => {
+            let pos = ctx.paned.position();
+            if ctx.sidetoc_right {
+                ctx.paned.set_position(pos + SIDETOC_WIDTH_STEP);
+            } else {
+                ctx.paned.set_position((pos - SIDETOC_WIDTH_STEP).max(0));
+            }
+        }
+        "quicktoc" => {
+            if ctx.stack.visible_child_name().as_deref() == Some("document") {
+                ctx.stack.set_visible_child_name("toc");
+            } else {
+                ctx.stack.set_visible_child_name("document");
+                ctx.webview.grab_focus();
+            }
+        }
+        _ => {}
     }
 }
 
-fn complete_path(
-    current_arg: &str,
-    cmd_prefix: &str,
+fn execute_commands(text: &str, ctx: &CommandContext) {
+    for part in crate::command::split_commands(text) {
+        let (cmd, arg) = crate::command::parse_command(&part);
+        execute_command(cmd, arg, ctx);
+    }
+}
+
+/// Handle Tab/Shift+Tab completion for both command names and paths.
+/// Updates entry text, match state, wildmenu label, and index.
+fn handle_tab_completion(
     entry: &gtk4::Entry,
+    wildmenu: &gtk4::Label,
     matches: &std::rc::Rc<std::cell::RefCell<Vec<String>>>,
     index: &std::rc::Rc<std::cell::Cell<usize>>,
     prefix: &std::rc::Rc<std::cell::RefCell<String>>,
+    reverse: bool,
 ) {
-    let expanded = expand_tilde(current_arg);
+    let text = entry.text().to_string();
+    let text_stripped = text.strip_prefix(':').unwrap_or(&text);
 
-    // If matches are empty or prefix changed, rebuild match list
-    if matches.borrow().is_empty() || *prefix.borrow() != current_arg {
-        *prefix.borrow_mut() = current_arg.to_string();
-        index.set(0);
-
-        let (dir, file_prefix) = if expanded.ends_with('/') || expanded.is_empty() {
-            (expanded.as_str().to_string(), "".to_string())
+    // Determine if we're completing a command name or a path
+    if !text_stripped.contains(' ') {
+        // Command name completion
+        let current_prefix = text_stripped;
+        if matches.borrow().is_empty() {
+            *prefix.borrow_mut() = current_prefix.to_string();
+            let found = crate::command::match_commands(current_prefix);
+            *matches.borrow_mut() = found;
+            index.set(0);
         } else {
-            let p = std::path::Path::new(&expanded);
-            let dir = p.parent().map_or(".", |d| if d.as_os_str().is_empty() { "." } else { d.to_str().unwrap_or(".") }).to_string();
-            let file = p.file_name().map_or("", |f| f.to_str().unwrap_or("")).to_string();
-            (dir, file)
-        };
+            cycle_index(index, matches.borrow().len(), reverse);
+        }
 
-        let mut found = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry_result in entries.flatten() {
-                let name = entry_result.file_name().to_string_lossy().to_string();
-                if name.starts_with(&file_prefix) {
-                    let full = if dir == "." {
-                        name.clone()
-                    } else {
-                        format!("{}/{}", dir.trim_end_matches('/'), name)
-                    };
-                    // Add trailing / for directories
-                    let full = if entry_result.path().is_dir() {
-                        format!("{}/", full)
-                    } else {
-                        full
-                    };
-                    found.push(full);
+        let matches_ref = matches.borrow();
+        if let Some(completion) = matches_ref.get(index.get()) {
+            if matches_ref.len() == 1 {
+                // Single match: complete with trailing space, hide wildmenu
+                let new_text = format!(":{} ", completion);
+                entry.set_text(&new_text);
+                entry.set_position(new_text.len() as i32);
+                wildmenu.set_visible(false);
+            } else {
+                // Multiple matches: complete to current, show wildmenu
+                let new_text = format!(":{}", completion);
+                entry.set_text(&new_text);
+                entry.set_position(new_text.len() as i32);
+                wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                wildmenu.set_visible(true);
+            }
+        }
+    } else {
+        // Path completion for open/o commands
+        if let Some(path_arg) = text_stripped.strip_prefix("open ").or_else(|| text_stripped.strip_prefix("o ")) {
+            let cmd_prefix = if text_stripped.starts_with("open ") { ":open " } else { ":o " };
+            let used_tilde = path_arg.starts_with('~');
+
+            if matches.borrow().is_empty() {
+                // First Tab: build match list from what the user typed
+                *prefix.borrow_mut() = path_arg.to_string();
+                let found = crate::command::match_paths(path_arg);
+                *matches.borrow_mut() = found;
+                index.set(0);
+            } else {
+                // Subsequent Tabs: cycle through existing matches
+                cycle_index(index, matches.borrow().len(), reverse);
+            }
+
+            let matches_ref = matches.borrow();
+            if let Some(completion) = matches_ref.get(index.get()) {
+                let display_path = crate::command::unexpand_tilde(completion, used_tilde);
+                let new_text = format!("{}{}", cmd_prefix, display_path);
+                entry.set_text(&new_text);
+                entry.set_position(new_text.len() as i32);
+
+                if matches_ref.len() > 1 {
+                    wildmenu.set_markup(&crate::command::wildmenu_markup(&matches_ref, index.get(), 10));
+                    wildmenu.set_visible(true);
+                } else {
+                    wildmenu.set_visible(false);
                 }
             }
         }
-        found.sort();
-        *matches.borrow_mut() = found;
-    } else {
-        // Cycle to next match
-        let next = (index.get() + 1) % matches.borrow().len().max(1);
-        index.set(next);
-    }
-
-    let matches_ref = matches.borrow();
-    if let Some(completion) = matches_ref.get(index.get()) {
-        // Convert back to use ~ if original used ~
-        let display_path = if current_arg.starts_with('~') {
-            let home = std::env::var("HOME").unwrap_or_default();
-            if completion.starts_with(&home) {
-                completion.replacen(&home, "~", 1)
-            } else {
-                completion.clone()
-            }
-        } else {
-            completion.clone()
-        };
-        let new_text = format!("{}{}", cmd_prefix, display_path);
-        entry.set_text(&new_text);
-        entry.set_position(new_text.len() as i32);
     }
 }
 
-pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, toc_mode: &str, infile: &str) {
+fn cycle_index(index: &std::rc::Rc<std::cell::Cell<usize>>, len: usize, reverse: bool) {
+    if len == 0 { return; }
+    if reverse {
+        index.set(if index.get() == 0 { len - 1 } else { index.get() - 1 });
+    } else {
+        index.set((index.get() + 1) % len);
+    }
+}
+
+pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: &str, infile: &str, runcmd: Option<&str>, sidetoc_width: u32, sidetoc_position: &str, keybinding_registry: crate::command::KeybindingRegistry) {
     let is_system_theme = theme_mode == "system";
-    let toc_mode = toc_mode.to_string();
     let infile = infile.to_string();
+    let runcmd = runcmd.map(|s| s.to_string());
+    let keybinding_registry = std::rc::Rc::new(keybinding_registry);
+    let sidetoc_width = sidetoc_width as i32;
+    let sidetoc_right = sidetoc_position == "right";
     let app = Application::builder()
         .application_id("org.mipmip.mip")
         .build();
@@ -268,7 +346,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             Vec::new()
         };
 
-        // Build window based on toc_mode
+        // Build TOC widgets (always created, hidden by default)
         let toc_store = create_toc_store();
         populate_toc(&toc_store, &initial_toc);
         let treeview = create_toc_view(&toc_store);
@@ -276,55 +354,61 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             .child(&treeview)
             .vexpand(true)
             .build();
-
-        // Expand all tree nodes by default
         treeview.expand_all();
 
-        let stack: Option<Stack> = if toc_mode == "zathura" {
-            let s = Stack::new();
-            s.add_named(&webview, Some("document"));
-            s.add_named(&toc_scrolled, Some("toc"));
-            s.set_visible_child_name("document");
-            Some(s)
-        } else {
-            None
-        };
+        // Quicktoc: Stack toggles between document and TOC
+        let stack = Stack::new();
+        stack.add_named(&webview, Some("document"));
+        // Quicktoc uses a separate ScrolledWindow wrapping the same treeview model
+        let quicktoc_treeview = create_toc_view(&toc_store);
+        quicktoc_treeview.expand_all();
+        let quicktoc_scrolled = ScrolledWindow::builder()
+            .child(&quicktoc_treeview)
+            .vexpand(true)
+            .build();
+        stack.add_named(&quicktoc_scrolled, Some("toc"));
+        stack.set_visible_child_name("document");
 
-        let window_ref = match toc_mode.as_str() {
-            "side" => {
-                let paned = Paned::new(Orientation::Horizontal);
-                paned.set_start_child(Some(&toc_scrolled));
-                paned.set_end_child(Some(&webview));
-                paned.set_position(250);
-                paned.set_shrink_start_child(false);
-                paned.set_shrink_end_child(false);
-                ApplicationWindow::builder()
-                    .application(app)
-                    .title("MiP")
-                    .default_width(800)
-                    .default_height(600)
-                    .child(&paned)
-                    .build()
-            }
-            "zathura" => {
-                ApplicationWindow::builder()
-                    .application(app)
-                    .title("MiP")
-                    .default_width(800)
-                    .default_height(600)
-                    .child(stack.as_ref().unwrap())
-                    .build()
-            }
-            _ => {
-                ApplicationWindow::builder()
-                    .application(app)
-                    .title("MiP")
-                    .default_width(800)
-                    .default_height(600)
-                    .child(&webview)
-                    .build()
-            }
-        };
+        // Sidetoc: Paned with TOC on one side, Stack on the other
+        let paned = Paned::new(Orientation::Horizontal);
+        if sidetoc_right {
+            paned.set_start_child(Some(&stack));
+            paned.set_end_child(Some(&toc_scrolled));
+        } else {
+            paned.set_start_child(Some(&toc_scrolled));
+            paned.set_end_child(Some(&stack));
+        }
+        // Allow shrinking to zero so we can collapse the sidetoc
+        paned.set_shrink_start_child(true);
+        paned.set_shrink_end_child(true);
+        // Start with sidetoc collapsed (position 0 for left, max for right)
+        if sidetoc_right {
+            // Will be corrected after window is shown
+            paned.set_position(10000);
+        } else {
+            paned.set_position(0);
+        }
+        // Track whether sidetoc is open
+
+        let window_ref = ApplicationWindow::builder()
+            .application(app)
+            .title("MiP")
+            .default_width(800)
+            .default_height(600)
+            .child(&paned)
+            .build();
+
+        // Command context for executing commands
+        let cmd_ctx = std::rc::Rc::new(CommandContext {
+            app: app.clone(),
+            window: window_ref.clone(),
+            paned: paned.clone(),
+            stack: stack.clone(),
+            webview: webview.clone(),
+            sidetoc_right,
+            sidetoc_width,
+            sidetoc_open: std::cell::Cell::new(false),
+        });
 
         // Command bar (hidden by default)
         let cmd_entry = gtk4::Entry::new();
@@ -336,7 +420,8 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         let css_provider = gtk4::CssProvider::new();
         css_provider.load_from_data(
             "entry.command-bar { font-family: monospace; padding: 4px 8px; background: #e8e8e8; border: none; border-radius: 0; outline: none; box-shadow: none; } \
-             entry.command-bar:focus { outline: none; box-shadow: none; border: none; }"
+             entry.command-bar:focus { outline: none; box-shadow: none; border: none; } \
+             label.wildmenu { font-family: monospace; padding: 4px 8px; background: #e8e8e8; border: none; border-radius: 0; }"
         );
         gtk4::style_context_add_provider_for_display(
             &gtk4::gdk::Display::default().unwrap(),
@@ -344,13 +429,20 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
 
-        // Wrap window content + command bar in a vertical box
-        // First, take the existing child out and put it in the box
+        // Wildmenu label (hidden by default, shows completion matches)
+        let wildmenu_label = gtk4::Label::new(None);
+        wildmenu_label.set_visible(false);
+        wildmenu_label.set_use_markup(true);
+        wildmenu_label.set_xalign(0.0);
+        wildmenu_label.add_css_class("wildmenu");
+
+        // Wrap window content + wildmenu + command bar in a vertical box
         let content_widget = window_ref.child().unwrap();
         window_ref.set_child(None::<&gtk4::Widget>);
         let outer_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         content_widget.set_vexpand(true);
         outer_box.append(&content_widget);
+        outer_box.append(&wildmenu_label);
         outer_box.append(&cmd_entry);
         window_ref.set_child(Some(&outer_box));
 
@@ -374,25 +466,44 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             cmd_entry.add_controller(focus_controller);
         }
 
-        // Command bar: `:` on window shows it (capture phase so it fires before children)
+        // Window key handler: `:` opens command bar, other keys check keybinding registry
         {
-            let cmd_entry_for_colon = cmd_entry.clone();
+            let cmd_entry_for_keys = cmd_entry.clone();
+            let registry = keybinding_registry.clone();
+            let ctx_for_keys = cmd_ctx.clone();
             let key_controller_cmd = gtk4::EventControllerKey::new();
             key_controller_cmd.set_propagation_phase(gtk4::PropagationPhase::Capture);
-            key_controller_cmd.connect_key_pressed(move |_, keyval, _keycode, _state| {
-                // Only activate if the command bar isn't already visible
-                if keyval == gtk4::gdk::Key::colon && !gtk4::prelude::WidgetExt::is_visible(&cmd_entry_for_colon) {
-                    cmd_entry_for_colon.set_text(":");
-                    cmd_entry_for_colon.set_visible(true);
-                    cmd_entry_for_colon.grab_focus();
-                    // Set cursor after colon on next idle tick (after GTK's select-all-on-focus)
-                    let entry = cmd_entry_for_colon.clone();
+            key_controller_cmd.connect_key_pressed(move |_, keyval, _keycode, state| {
+                // Skip when command bar is visible (all keys go to entry)
+                if gtk4::prelude::WidgetExt::is_visible(&cmd_entry_for_keys) {
+                    return glib::Propagation::Proceed;
+                }
+
+                // `:` always opens command bar (not rebindable)
+                if keyval == gtk4::gdk::Key::colon {
+                    cmd_entry_for_keys.set_text(":");
+                    cmd_entry_for_keys.set_visible(true);
+                    cmd_entry_for_keys.grab_focus();
+                    let entry = cmd_entry_for_keys.clone();
                     glib::idle_add_local_once(move || {
-                        entry.select_region(1, 1); // deselect all, cursor at pos 1
+                        entry.select_region(1, 1);
                         entry.set_position(1);
                     });
                     return glib::Propagation::Stop;
                 }
+
+                // Look up keybinding
+                let ctrl = state.contains(gtk4::gdk::ModifierType::CONTROL_MASK);
+                let shift = state.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
+                let alt = state.contains(gtk4::gdk::ModifierType::ALT_MASK);
+                let super_ = state.contains(gtk4::gdk::ModifierType::SUPER_MASK);
+
+                if let Some(command) = registry.lookup(keyval.into_glib(), ctrl, shift, alt, super_) {
+                    let command = command.to_string();
+                    execute_commands(&command, &ctx_for_keys);
+                    return glib::Propagation::Stop;
+                }
+
                 glib::Propagation::Proceed
             });
             window_ref.add_controller(key_controller_cmd);
@@ -402,25 +513,25 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
         {
             let cmd_entry_for_activate = cmd_entry.clone();
             let webview_for_activate = webview.clone();
-            let app_for_activate = app.clone();
+            let wildmenu_for_activate = wildmenu_label.clone();
+            let ctx = cmd_ctx.clone();
             cmd_entry.connect_activate(move |entry| {
                 let text = entry.text().to_string();
                 cmd_entry_for_activate.set_text("");
                 cmd_entry_for_activate.set_visible(false);
+                wildmenu_for_activate.set_visible(false);
                 webview_for_activate.grab_focus();
-                // Parse and execute command (strip leading :)
+                // Strip leading : and execute (supports ; composition)
                 let text = text.strip_prefix(':').unwrap_or(&text);
-                let mut parts = text.splitn(2, char::is_whitespace);
-                let cmd = parts.next().unwrap_or("").trim();
-                let arg = parts.next().unwrap_or("").trim();
-                execute_command(cmd, arg, &app_for_activate);
+                execute_commands(text, &ctx);
             });
         }
 
-        // Command bar: Escape dismisses, Tab completes (capture phase to intercept before other handlers)
+        // Command bar: Escape dismisses, Tab/Shift+Tab completes (capture phase)
         {
             let cmd_entry_for_keys = cmd_entry.clone();
             let webview_for_cmd = webview.clone();
+            let wildmenu_for_keys = wildmenu_label.clone();
             let key_controller_entry = gtk4::EventControllerKey::new();
             key_controller_entry.set_propagation_phase(gtk4::PropagationPhase::Capture);
             let tab_matches: std::rc::Rc<std::cell::RefCell<Vec<String>>> = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
@@ -431,11 +542,13 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             let tab_index_clone = tab_index.clone();
             let tab_prefix_clone = tab_prefix.clone();
 
-            key_controller_entry.connect_key_pressed(move |_, keyval, _keycode, _state| {
+            key_controller_entry.connect_key_pressed(move |_, keyval, _keycode, state| {
+                let shift = state.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
                 match keyval {
                     v if v == gtk4::gdk::Key::Escape => {
                         cmd_entry_for_keys.set_text("");
                         cmd_entry_for_keys.set_visible(false);
+                        wildmenu_for_keys.set_visible(false);
                         webview_for_cmd.grab_focus();
                         tab_matches_clone.borrow_mut().clear();
                         tab_index_clone.set(0);
@@ -444,40 +557,54 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                     v if v == gtk4::gdk::Key::BackSpace => {
                         let text = cmd_entry_for_keys.text().to_string();
                         if text == ":" {
-                            // Backspace on just ":" closes command bar (like vim)
                             cmd_entry_for_keys.set_text("");
                             cmd_entry_for_keys.set_visible(false);
+                            wildmenu_for_keys.set_visible(false);
                             webview_for_cmd.grab_focus();
                             tab_matches_clone.borrow_mut().clear();
                             tab_index_clone.set(0);
                             glib::Propagation::Stop
                         } else if text.len() > 1 && cmd_entry_for_keys.position() <= 1 {
-                            // Don't allow deleting the colon when there's text after it
                             glib::Propagation::Stop
                         } else {
                             tab_matches_clone.borrow_mut().clear();
                             tab_index_clone.set(0);
+                            wildmenu_for_keys.set_visible(false);
                             glib::Propagation::Proceed
                         }
                     }
-                    v if v == gtk4::gdk::Key::Tab => {
-                        let text = cmd_entry_for_keys.text().to_string();
-                        let text_stripped = text.strip_prefix(':').unwrap_or(&text);
-                        // Only complete for open/o commands
-                        if let Some(path_arg) = text_stripped.strip_prefix("open ").or_else(|| text_stripped.strip_prefix("o ")) {
-                            let cmd_prefix = if text_stripped.starts_with("open ") { ":open " } else { ":o " };
-                            complete_path(path_arg, cmd_prefix, &cmd_entry_for_keys, &tab_matches_clone, &tab_index_clone, &tab_prefix_clone);
-                        }
+                    v if v == gtk4::gdk::Key::Tab || v == gtk4::gdk::Key::ISO_Left_Tab => {
+                        let reverse = shift || v == gtk4::gdk::Key::ISO_Left_Tab;
+                        handle_tab_completion(
+                            &cmd_entry_for_keys,
+                            &wildmenu_for_keys,
+                            &tab_matches_clone,
+                            &tab_index_clone,
+                            &tab_prefix_clone,
+                            reverse,
+                        );
                         glib::Propagation::Stop
                     }
                     v if v == gtk4::gdk::Key::Home || (v == gtk4::gdk::Key::Left && cmd_entry_for_keys.position() <= 1) => {
-                        // Don't allow cursor before the colon
                         glib::Propagation::Stop
                     }
                     _ => {
-                        // Any non-Tab key resets tab completion state
-                        tab_matches_clone.borrow_mut().clear();
-                        tab_index_clone.set(0);
+                        // Don't reset on modifier-only keys (Shift, Ctrl, Alt, Super)
+                        let is_modifier = matches!(keyval,
+                            v if v == gtk4::gdk::Key::Shift_L
+                              || v == gtk4::gdk::Key::Shift_R
+                              || v == gtk4::gdk::Key::Control_L
+                              || v == gtk4::gdk::Key::Control_R
+                              || v == gtk4::gdk::Key::Alt_L
+                              || v == gtk4::gdk::Key::Alt_R
+                              || v == gtk4::gdk::Key::Super_L
+                              || v == gtk4::gdk::Key::Super_R
+                        );
+                        if !is_modifier {
+                            tab_matches_clone.borrow_mut().clear();
+                            tab_index_clone.set(0);
+                            wildmenu_for_keys.set_visible(false);
+                        }
                         glib::Propagation::Proceed
                     }
                 }
@@ -485,67 +612,41 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
             cmd_entry.add_controller(key_controller_entry);
         }
 
-        // Connect TOC row-activated → scroll to heading
+        // Connect TOC row-activated → scroll to heading (for sidetoc treeview)
         {
             let webview_for_activate = webview.clone();
-            let stack_for_activate = stack.clone();
-            let toc_mode_for_activate = toc_mode.clone();
             treeview.connect_row_activated(move |tv, path, _col| {
                 let Some(model) = tv.model() else { return };
                 let Some(iter) = model.iter(path) else { return };
                 let anchor_id: String = model.get(&iter, COL_ANCHOR as i32);
                 scroll_to_anchor(&webview_for_activate, &anchor_id);
-                // In zathura mode, switch back to document view
-                if toc_mode_for_activate == "zathura" {
-                    if let Some(ref s) = stack_for_activate {
-                        s.set_visible_child_name("document");
-                    }
-                }
             });
         }
 
-        // Keyboard handling for zathura mode and vim navigation
-        if toc_mode == "zathura" {
-            // Tab on webview → show TOC
-            // Must use capture phase because WebKitGTK consumes Tab internally
-            let stack_for_tab = stack.clone();
-            let treeview_for_tab = treeview.clone();
-            let cmd_entry_for_zathura = cmd_entry.clone();
-            let key_controller_wv = gtk4::EventControllerKey::new();
-            key_controller_wv.set_propagation_phase(gtk4::PropagationPhase::Capture);
-            key_controller_wv.connect_key_pressed(move |_, keyval, _keycode, _state| {
-                // Don't intercept when command bar is open
-                if gtk4::prelude::WidgetExt::is_visible(&cmd_entry_for_zathura) {
-                    return glib::Propagation::Proceed;
-                }
-                if keyval == gtk4::gdk::Key::Tab {
-                    if let Some(ref s) = stack_for_tab {
-                        if s.visible_child_name().as_deref() == Some("document") {
-                            s.set_visible_child_name("toc");
-                            treeview_for_tab.grab_focus();
-                            return glib::Propagation::Stop;
-                        }
-                    }
-                }
-                glib::Propagation::Proceed
+        // Connect quicktoc row-activated → scroll + switch back to document
+        {
+            let webview_for_qtoc = webview.clone();
+            let stack_for_qtoc = stack.clone();
+            quicktoc_treeview.connect_row_activated(move |tv, path, _col| {
+                let Some(model) = tv.model() else { return };
+                let Some(iter) = model.iter(path) else { return };
+                let anchor_id: String = model.get(&iter, COL_ANCHOR as i32);
+                scroll_to_anchor(&webview_for_qtoc, &anchor_id);
+                stack_for_qtoc.set_visible_child_name("document");
             });
-            window_ref.add_controller(key_controller_wv);
         }
 
-        // Key handler on TreeView: j/k navigation, Esc to close, Enter/Tab to activate
+        // Key handler on quicktoc TreeView: j/k navigation, Esc to close, Enter to activate
         {
             let webview_for_keys = webview.clone();
             let stack_for_keys = stack.clone();
-            let toc_mode_for_keys = toc_mode.clone();
             let key_controller_tv = gtk4::EventControllerKey::new();
-            let treeview_for_keys = treeview.clone();
+            let treeview_for_keys = quicktoc_treeview.clone();
             key_controller_tv.connect_key_pressed(move |_, keyval, _keycode, _state| {
                 match keyval {
                     v if v == gtk4::gdk::Key::j => {
-                        // Move cursor down
                         if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
                             let mut next = path;
-                            // Try to go to first child, or next sibling, or parent's next sibling
                             if treeview_for_keys.row_expanded(&next) {
                                 next.append_index(0);
                             } else {
@@ -556,7 +657,6 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         glib::Propagation::Stop
                     }
                     v if v == gtk4::gdk::Key::k => {
-                        // Move cursor up
                         if let (Some(path), _) = TreeViewExt::cursor(&treeview_for_keys) {
                             let mut prev = path;
                             if !prev.prev() {
@@ -570,31 +670,25 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         glib::Propagation::Stop
                     }
                     v if v == gtk4::gdk::Key::Return => {
-                        // Activate current row
                         if let (Some(path), col) = TreeViewExt::cursor(&treeview_for_keys) {
                             treeview_for_keys.row_activated(&path, col.as_ref());
                         }
                         glib::Propagation::Stop
                     }
-                    v if v == gtk4::gdk::Key::Tab && toc_mode_for_keys == "zathura" => {
-                        // Activate current row (same as Enter in zathura)
-                        if let (Some(path), col) = TreeViewExt::cursor(&treeview_for_keys) {
-                            treeview_for_keys.row_activated(&path, col.as_ref());
-                        }
-                        glib::Propagation::Stop
-                    }
-                    v if v == gtk4::gdk::Key::Escape && toc_mode_for_keys == "zathura" => {
-                        // Close TOC without navigating
-                        if let Some(ref s) = stack_for_keys {
-                            s.set_visible_child_name("document");
-                            webview_for_keys.grab_focus();
-                        }
+                    v if v == gtk4::gdk::Key::Escape => {
+                        stack_for_keys.set_visible_child_name("document");
+                        webview_for_keys.grab_focus();
                         glib::Propagation::Stop
                     }
                     _ => glib::Propagation::Proceed,
                 }
             });
-            treeview.add_controller(key_controller_tv);
+            quicktoc_treeview.add_controller(key_controller_tv);
+        }
+
+        // Execute runcmd at startup (after all widgets are built)
+        if let Some(ref runcmd_text) = runcmd {
+            execute_commands(runcmd_text, &cmd_ctx);
         }
 
         // Poll seed file and update page content via JS injection
@@ -644,6 +738,7 @@ pub fn window(port: u16, temp_dir: PathBuf, show_frontmatter: bool, theme_mode: 
                         if toc_entries != last_toc {
                             populate_toc(&toc_store, &toc_entries);
                             treeview.expand_all();
+                            quicktoc_treeview.expand_all();
                             last_toc = toc_entries;
                         }
                     }

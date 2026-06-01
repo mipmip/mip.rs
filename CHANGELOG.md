@@ -19,8 +19,18 @@
 - vim-style keyboard navigation in TOC (j/k, Enter, Esc)
 - headings now get anchor `id` attributes for in-document navigation
 - add vim-style command mode (`:`) with `:q`, `:open` commands and Tab path completion
-- add `toc` config option in `config.toml`
+- add wildmenu completion popup with command name and path completion, Shift+Tab backward cycling
+- path completion filters to markdown files (.md, .markdown, .mkd, .qmd) and directories
 - only rebuild TOC and re-inject HTML when content actually changes (reduces flicker)
+- **BREAKING**: rename zathura → quicktoc, side → sidetoc; replace `--toc` with `--runcmd`
+- add navigation commands: `sidetoc_open/close/toggle`, `sidetoc_expand/shrink_width`, `quicktoc`
+- add `--runcmd` CLI option for executing commands at startup (replaces `--toc`)
+- add command composition with `;` separator (works in command bar, --runcmd, config)
+- add config settings: `runcmd`, `sidetoc_width`, `sidetoc_position`
+- both sidetoc and quicktoc always available, hidden by default
+- add configurable keybindings via `[keybindings]` section in config.toml
+- default keybindings: Tab → quicktoc, Ctrl+P → print
+- add `--initconf` flag to generate a documented default config file
 
 ## v0.3.0 - 28 May 2026
 

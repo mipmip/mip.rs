@@ -64,3 +64,10 @@ The system SHALL accept a `--theme` option with values `system`, `light`, or `da
 #### Scenario: Theme option not provided
 - **WHEN** the user runs `mip <file>` without `--theme`
 - **THEN** the system SHALL use the config file value, or "system" if no config
+
+### Requirement: --initconf flag
+The system SHALL accept a `--initconf` flag that generates a default config file and exits.
+
+#### Scenario: Initconf flag
+- **WHEN** the user runs `mip --initconf`
+- **THEN** the system SHALL generate the config file and exit (no file argument required, no preview window)
