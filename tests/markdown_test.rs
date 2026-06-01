@@ -72,6 +72,7 @@ fn test_build_html_replaces_placeholders() {
         false,
         "dark",
         false,
+        false,
     );
 
     assert!(result.contains("<h1 id=\"hello\">Hello</h1>"));
@@ -87,7 +88,7 @@ fn test_build_html_replaces_placeholders() {
 #[test]
 fn test_build_html_applies_theme_class() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}</body></html>";
-    let result = build_html("hello", template, "s", "u", false, "light", false);
+    let result = build_html("hello", template, "s", "u", false, "light", false, false);
     assert!(result.contains("class=\"light\""));
 }
 
@@ -95,7 +96,7 @@ fn test_build_html_applies_theme_class() {
 fn test_build_html_with_frontmatter() {
     let template = "<html>#{BODY}</html>";
     let md = "---\ntitle: Test\n---\n\nBody text";
-    let result = build_html(md, template, "s", "u", true, "light", false);
+    let result = build_html(md, template, "s", "u", true, "light", false, false);
     assert!(result.contains("<table class=\"frontmatter\">"));
     assert!(result.contains("title"));
 }
@@ -208,7 +209,7 @@ fn test_math_in_fenced_code_block_not_rendered() {
 #[test]
 fn test_build_html_math_enabled_includes_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", true);
+    let result = build_html("$x$", template, "s", "u", false, "light", true, false);
     assert!(result.contains("katex.min.js"));
     assert!(result.contains("katex.min.css"));
     assert!(result.contains("renderMath"));
@@ -217,7 +218,34 @@ fn test_build_html_math_enabled_includes_katex() {
 #[test]
 fn test_build_html_math_disabled_no_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", false);
+    let result = build_html("$x$", template, "s", "u", false, "light", false, false);
     assert!(!result.contains("katex.min.js"));
     assert!(!result.contains("renderMath"));
+}
+
+// Mermaid integration tests
+
+#[test]
+fn test_mermaid_code_block_produces_language_mermaid_class() {
+    let md = "```mermaid\ngraph TD;\n    A-->B;\n```";
+    let (html, _toc, _title) = md_to_html_body_with_toc(md, false, false, 1, false);
+    assert!(html.contains("<code class=\"language-mermaid\">"));
+    assert!(html.contains("graph TD;"));
+}
+
+#[test]
+fn test_build_html_mermaid_enabled_includes_mermaid_scripts() {
+    let template = "<html><head></head><body>#{BODY}</body></html>";
+    let result = build_html("# Hello", template, "s", "u", false, "light", false, true);
+    assert!(result.contains("mermaid.min.js"));
+    assert!(result.contains("renderMermaid"));
+    assert!(result.contains("startOnLoad:false"));
+}
+
+#[test]
+fn test_build_html_mermaid_disabled_no_mermaid_scripts() {
+    let template = "<html><head></head><body>#{BODY}</body></html>";
+    let result = build_html("# Hello", template, "s", "u", false, "light", false, false);
+    assert!(!result.contains("mermaid.min.js"));
+    assert!(!result.contains("renderMermaid"));
 }

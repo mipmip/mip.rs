@@ -15,6 +15,7 @@ pub struct Config {
     pub paragraph_numbers_start: Option<u8>,
     pub history_size: Option<u32>,
     pub math: Option<bool>,
+    pub mermaid: Option<bool>,
 }
 
 impl Config {
@@ -107,6 +108,10 @@ impl Config {
     pub fn math(&self) -> bool {
         self.math.unwrap_or(true)
     }
+
+    pub fn mermaid(&self) -> bool {
+        self.mermaid.unwrap_or(true)
+    }
 }
 
 /// Returns the documented default config template.
@@ -143,6 +148,9 @@ paragraph_numbers_start = 1
 # Enable TeX math rendering via KaTeX ($..$ inline, $$...$$ display)
 math = true
 
+# Enable Mermaid diagram rendering (```mermaid code blocks)
+mermaid = true
+
 # Maximum number of command bar history entries to keep
 history_size = 50
 
@@ -176,6 +184,7 @@ history_size = 50
 #   scroll_bottom          - scroll to bottom (End, G)
 #   scroll_next_heading    - jump to next heading (n)
 #   scroll_prev_heading    - jump to previous heading (N)
+#   export_html <path>     - export current document as standalone HTML file
 [keybindings]
 tab = "quicktoc"
 "ctrl+p" = "print"

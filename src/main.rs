@@ -42,6 +42,10 @@ struct Cli {
     /// disable math rendering
     #[argh(switch)]
     no_math: bool,
+
+    /// disable mermaid diagram rendering
+    #[argh(switch)]
+    no_mermaid: bool,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -62,6 +66,7 @@ fn watch(
     theme_class: String,
     new_file_rx: std::sync::mpsc::Receiver<PathBuf>,
     math: bool,
+    mermaid: bool,
 ) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -99,6 +104,7 @@ fn watch(
                             show_frontmatter,
                             &theme_class,
                             math,
+                            mermaid,
                         );
                     }
                 }
@@ -204,6 +210,9 @@ fn main() {
     // CLI --no-math overrides config (flag presence means false)
     let math = if cli.no_math { false } else { cfg.math() };
 
+    // CLI --no-mermaid overrides config (flag presence means false)
+    let mermaid = if cli.no_mermaid { false } else { cfg.mermaid() };
+
     let path_file = path_file0;
 
     let path_parsed = Path::new(&path_file);
@@ -254,6 +263,7 @@ fn main() {
             show_frontmatter,
             &theme_class_string,
             math,
+            mermaid,
         );
 
         // Channel for :open to send new file paths to the watcher
@@ -277,6 +287,7 @@ fn main() {
                         theme_class_for_watcher,
                         new_file_rx,
                         math,
+                        mermaid,
                     ) {
                         println!("error: {:?}", e)
                     }
@@ -305,6 +316,7 @@ fn main() {
             cfg.history_size(),
             new_file_tx,
             math,
+            mermaid,
         );
     } else {
         panic!("E2");

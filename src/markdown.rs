@@ -387,6 +387,25 @@ const MATH_SCRIPTS: &str = r#"<link rel="stylesheet" href="/katex/katex.min.css"
       document.addEventListener('DOMContentLoaded',renderMath);
     </script>"#;
 
+const MERMAID_SCRIPTS: &str = r#"<script src="/mermaid/mermaid.min.js"></script>
+    <script>
+      mermaid.initialize({startOnLoad:false,theme:document.documentElement.classList.contains('dark')?'dark':'default'});
+      function renderMermaid(){
+        document.querySelectorAll('code.language-mermaid').forEach(function(code){
+          var pre=code.parentElement;
+          pre.setAttribute('data-mermaid-source',code.textContent);
+          pre.classList.add('mermaid');
+          pre.textContent=code.textContent;
+        });
+        document.querySelectorAll('pre.mermaid[data-mermaid-source]').forEach(function(pre){
+          pre.removeAttribute('data-processed');
+          pre.textContent=pre.getAttribute('data-mermaid-source');
+        });
+        mermaid.run({querySelector:'.mermaid'});
+      }
+      document.addEventListener('DOMContentLoaded',renderMermaid);
+    </script>"#;
+
 pub fn build_html(
     markdown_input: &str,
     template: &str,
@@ -395,6 +414,7 @@ pub fn build_html(
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
+    mermaid: bool,
 ) -> String {
     let html_body = md_to_html_body(markdown_input, show_frontmatter);
     let mut result = template
@@ -404,6 +424,9 @@ pub fn build_html(
         .replace("#{THEME_CLASS}", theme_class);
     if math {
         result = result.replace("</head>", &format!("{}\n</head>", MATH_SCRIPTS));
+    }
+    if mermaid {
+        result = result.replace("</head>", &format!("{}\n</head>", MERMAID_SCRIPTS));
     }
     result
 }
@@ -415,6 +438,7 @@ pub fn to_html(
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
+    mermaid: bool,
 ) {
     let markdown_input = fs::read_to_string(infile);
     if let Ok(markdown_input) = markdown_input {
@@ -425,6 +449,7 @@ pub fn to_html(
             show_frontmatter,
             theme_class,
             math,
+            mermaid,
         )
     };
 }
@@ -436,6 +461,7 @@ fn to_file(
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
+    mermaid: bool,
 ) {
     let seed_url = format!("http://localhost:{}/.temp.seed", port);
 
@@ -457,6 +483,7 @@ fn to_file(
                 show_frontmatter,
                 theme_class,
                 math,
+                mermaid,
             );
             if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
                 if e.kind() != std::io::ErrorKind::NotFound {

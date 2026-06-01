@@ -168,3 +168,24 @@ fn test_load_from_math_missing_defaults_to_true() {
     let cfg = Config::load_from(file.path());
     assert!(cfg.math());
 }
+
+#[test]
+fn test_load_from_mermaid_true() {
+    let file = write_temp_config("mermaid = true\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.mermaid());
+}
+
+#[test]
+fn test_load_from_mermaid_false() {
+    let file = write_temp_config("mermaid = false\n");
+    let cfg = Config::load_from(file.path());
+    assert!(!cfg.mermaid());
+}
+
+#[test]
+fn test_load_from_mermaid_missing_defaults_to_true() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert!(cfg.mermaid());
+}

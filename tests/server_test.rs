@@ -155,3 +155,23 @@ async fn test_route_katex_font() {
             .contains("woff2")
     );
 }
+
+#[tokio::test]
+async fn test_route_mermaid_js() {
+    let dir = tempfile::tempdir().unwrap();
+    let temp_dir = dir.path().to_str().unwrap().to_string();
+    std::fs::write(dir.path().join(".temp.html"), "").unwrap();
+    std::fs::write(dir.path().join(".temp.seed"), "").unwrap();
+
+    let routes = RestBro::routes(temp_dir.clone(), temp_dir);
+
+    let resp = warp::test::request()
+        .path("/mermaid/mermaid.min.js")
+        .reply(&routes)
+        .await;
+
+    assert_eq!(resp.status(), 200);
+    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("javascript"));
+    let body = String::from_utf8_lossy(resp.body());
+    assert!(body.len() > 1000); // mermaid.min.js is ~3MB
+}

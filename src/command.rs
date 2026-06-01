@@ -4,6 +4,7 @@
 const COMMANDS: &[&str] = &[
     "close",
     "document_focus",
+    "export_html",
     "o",
     "open",
     "print",
@@ -1202,5 +1203,11 @@ mod tests {
     fn test_match_settings_empty_prefix() {
         let matches = match_settings("");
         assert_eq!(matches.len(), 4);
+    }
+
+    #[test]
+    fn test_export_html_in_command_list() {
+        let matches = match_commands("export");
+        assert_eq!(matches, vec!["export_html"]);
     }
 }
