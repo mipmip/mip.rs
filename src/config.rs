@@ -145,6 +145,7 @@ history_size = 50
 
 # Keybindings: key_combo = "command"
 # Key combos: ctrl+key, shift+key, alt+key, super+key, or plain key
+# Key sequences: "key1,key2" (e.g. "g,g" = press g then g within 500ms)
 # Commands can be composed with semicolons: "cmd1; cmd2"
 #
 # Available commands:
@@ -162,12 +163,38 @@ history_size = 50
 #   zoom_in                - zoom in 10% (Ctrl+=)
 #   zoom_out               - zoom out 10% (Ctrl+-)
 #   zoom_reset             - reset zoom to 100% (Ctrl+0)
+#   scroll_down            - scroll down one step (j)
+#   scroll_up              - scroll up one step (k)
+#   scroll_page_down       - scroll down one page (Ctrl+F)
+#   scroll_page_up         - scroll up one page (Ctrl+B)
+#   scroll_half_down       - scroll down half page (Ctrl+D)
+#   scroll_half_up         - scroll up half page (Ctrl+U)
+#   scroll_top             - scroll to top (Home, gg)
+#   scroll_bottom          - scroll to bottom (End, G)
+#   scroll_next_heading    - jump to next heading (n)
+#   scroll_prev_heading    - jump to previous heading (N)
 [keybindings]
 tab = "quicktoc"
 "ctrl+p" = "print"
 "ctrl+=" = "zoom_in"
 "ctrl+-" = "zoom_out"
 "ctrl+0" = "zoom_reset"
+j = "scroll_down"
+k = "scroll_up"
+down = "scroll_down"
+up = "scroll_up"
+"ctrl+f" = "scroll_page_down"
+"ctrl+b" = "scroll_page_up"
+pagedown = "scroll_page_down"
+pageup = "scroll_page_up"
+"ctrl+d" = "scroll_half_down"
+"ctrl+u" = "scroll_half_up"
+home = "scroll_top"
+end = "scroll_bottom"
+"shift+g" = "scroll_bottom"
+"g,g" = "scroll_top"
+n = "scroll_next_heading"
+"shift+n" = "scroll_prev_heading"
 # "ctrl+b" = "sidetoc_toggle"
 # "ctrl+y" = "open ~/todo.md"
 "#

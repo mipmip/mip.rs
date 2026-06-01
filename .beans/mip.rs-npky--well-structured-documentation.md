@@ -1,7 +1,7 @@
 ---
 # mip.rs-npky
 title: well structured documentation
-status: draft
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-06-01T10:49:07Z

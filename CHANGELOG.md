@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- add vim-style navigation: j/k scroll, Ctrl+f/b page scroll, Ctrl+d/u half-page, g,g/shift+G top/bottom, n/N heading jump
+- add key sequence support in keybinding system (comma-separated sequences like `g,g` with 500ms timeout)
+- add desktop icon: SVG icon in taskbar, `.desktop` file for app launchers, Nix packaging installs icon and desktop entry
+- add dynamic window title: shows frontmatter `title` or filename as `<title> - MiP`
+- `:open` now reloads file in-place instead of spawning a new process; preserves runtime settings, updates file watcher and server directory
+- remove `string_to_static_str` / `Box::leak` memory leaks in main.rs
 - add CLI argument parsing with `argh`: `--help`, `--version`, `--verbose` flags
 - fix panic when running without arguments (now prints help and exits cleanly)
 - add `--frontmatter` flag to display YAML frontmatter as a styled table

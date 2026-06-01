@@ -46,3 +46,25 @@ Key combos SHALL be specified as modifier+key strings separated by `+`.
 #### Scenario: Plain key
 - **WHEN** the config contains `tab = "quicktoc"`
 - **THEN** pressing Tab SHALL execute `quicktoc`
+
+### Requirement: Key sequence support
+The system SHALL support comma-separated key sequences (e.g. `"g,g"`, `"ctrl+g,g"`).
+
+#### Scenario: Sequence syntax
+- **WHEN** the config contains `"g,g" = "scroll_top"`
+- **THEN** pressing `g` followed by `g` within 500ms SHALL execute `scroll_top`
+
+#### Scenario: Sequence timeout
+- **WHEN** the first key of a sequence is pressed and 500ms elapses without a second key
+- **THEN** the pending state SHALL be silently discarded on next keypress
+
+#### Scenario: Non-matching second key
+- **WHEN** a non-matching key is pressed during pending state
+- **THEN** the pending state SHALL be discarded and the new key processed normally
+
+#### Scenario: Sequence conflicts with single binding
+- **WHEN** a key is both a single-combo binding AND the first key of a sequence
+- **THEN** the sequence SHALL take priority (the single binding becomes unreachable)
+
+### Requirement: Pending state management
+Pending key state SHALL be cleared when the command bar opens or focus moves to a TreeView.

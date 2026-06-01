@@ -51,11 +51,19 @@ The system SHALL quit the application when `q` or `close` is entered.
 - **THEN** the system SHALL close the application
 
 ### Requirement: Open command
-The system SHALL open a different markdown file when `open <path>` or `o <path>` is entered.
+The system SHALL reload a different markdown file in-place when `open <path>` or `o <path>` is entered, instead of spawning a new process.
 
 #### Scenario: Open existing file
 - **WHEN** the user enters `open ~/docs/README.md` and the file exists
-- **THEN** the system SHALL open the file in a new mip instance and close the current one
+- **THEN** the system SHALL render the new file in the current window, preserving runtime settings
+
+#### Scenario: Open file in different directory
+- **WHEN** the user opens a file in a different directory than the current file
+- **THEN** the system SHALL update the file watcher and server to the new directory, and images SHALL resolve correctly
+
+#### Scenario: Open preserves settings
+- **WHEN** the user has changed settings via `:set` (e.g. theme, frontmatter) and then runs `:open`
+- **THEN** the runtime settings SHALL be preserved for the new document
 
 ### Requirement: Tab completion for file paths
 The system SHALL complete file paths when Tab is pressed in the command bar during an `open` command.
