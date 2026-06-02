@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.4.1 - 2 jun 2026
+
 ## v0.4.0 - 2 jun 2026
 
 - add custom styles: load user CSS from `~/.config/miprs/styles/<name>/style.css` with live-reload

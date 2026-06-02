@@ -92,7 +92,7 @@ echo "  git push origin ${TAG}"
 echo ""
 
 if gum confirm "Push now?"; then
-    jj git push --bookmark "${TAG}"
+    jj git push --bookmark "${TAG}" --allow-new
     git push origin "${TAG}"
     echo "✓ Pushed!"
 else
