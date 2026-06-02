@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.4.0 - 2 jun 2026
+
 - add custom styles: load user CSS from `~/.config/miprs/styles/<name>/style.css` with live-reload
 - add `style` config setting to select a custom style
 - add `--initstyle <name>` CLI flag to scaffold a new style with documented default CSS
