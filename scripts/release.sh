@@ -46,7 +46,7 @@ gum style --foreground 220 "Planned changes:"
 echo "  Version: v${CURRENT_VERSION} → v${NEW_VERSION}"
 echo "  Changelog: ## Unreleased → ## v${NEW_VERSION} - ${RELEASE_DATE}"
 echo "  Tag: ${TAG}"
-echo "  Bookmark: ${TAG}"
+echo "  Main: updated to release commit"
 echo ""
 
 if ! gum confirm "Proceed with release?"; then
@@ -74,27 +74,28 @@ echo "✓ jj describe: release v${NEW_VERSION}"
 jj new
 echo "✓ jj new (clean working copy)"
 
-# 6. Set jj bookmark on the release commit
-jj bookmark set "${TAG}" -r @-
-echo "✓ jj bookmark: ${TAG}"
+# 6. Point main to the release commit
+jj bookmark set main -r @-
+echo "✓ main → release v${NEW_VERSION}"
 
 # 7. Export to git and create tag
 jj git export
-git tag "${TAG}" "$(jj log -r @- --no-graph -T 'commit_id')"
+RELEASE_COMMIT=$(jj log -r @- --no-graph -T 'commit_id')
+git tag "${TAG}" "${RELEASE_COMMIT}"
 echo "✓ git tag: ${TAG}"
 
 echo ""
 gum style --foreground 82 --bold "Release v${NEW_VERSION} ready!"
 echo ""
-echo "To push:"
-echo "  jj git push --bookmark ${TAG}"
+echo "To push manually:"
+echo "  jj git push --bookmark main"
 echo "  git push origin refs/tags/${TAG}"
 echo ""
 
 if gum confirm "Push now?"; then
-    jj git push --bookmark "${TAG}" --allow-new
+    jj git push --bookmark main
     git push origin "refs/tags/${TAG}"
-    echo "✓ Pushed!"
+    echo "✓ Pushed main and tag ${TAG}!"
 else
     echo "Skipped push. Run the commands above when ready."
 fi
