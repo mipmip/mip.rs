@@ -88,12 +88,12 @@ gum style --foreground 82 --bold "Release v${NEW_VERSION} ready!"
 echo ""
 echo "To push:"
 echo "  jj git push --bookmark ${TAG}"
-echo "  git push origin ${TAG}"
+echo "  git push origin refs/tags/${TAG}"
 echo ""
 
 if gum confirm "Push now?"; then
     jj git push --bookmark "${TAG}" --allow-new
-    git push origin "${TAG}"
+    git push origin "refs/tags/${TAG}"
     echo "✓ Pushed!"
 else
     echo "Skipped push. Run the commands above when ready."
