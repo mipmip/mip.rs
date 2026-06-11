@@ -1022,8 +1022,19 @@ pub fn window(
                 }
 
                 let ctrl = state.contains(gtk4::gdk::ModifierType::CONTROL_MASK);
+
+                if ctrl && (keyval == gtk4::gdk::Key::q || keyval == gtk4::gdk::Key::w) {
+                    pending_key.set(None);
+                    ctx_for_keys.app.quit();
+                    return glib::Propagation::Stop;
+                }
                 let shift = state.contains(gtk4::gdk::ModifierType::SHIFT_MASK);
                 let alt = state.contains(gtk4::gdk::ModifierType::ALT_MASK);
+                if alt && keyval == gtk4::gdk::Key::F4 {
+                    pending_key.set(None);
+                    ctx_for_keys.app.quit();
+                    return glib::Propagation::Stop;
+                }
                 let super_ = state.contains(gtk4::gdk::ModifierType::SUPER_MASK);
                 let kv = keyval.into_glib();
 
