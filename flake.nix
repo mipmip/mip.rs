@@ -39,6 +39,12 @@
 
           GST_PLUGIN_PATH = with pkgs.gst_all_1; "${gstreamer}/lib/gstreamer-1.0:${gst-plugins-base}/lib/gstreamer-1.0:${gst-plugins-good}/lib/gstreamer-1.0:${gst-plugins-bad}/lib/gstreamer-1.0";
 
+          # WebKitGTK launches its web processes inside a bwrap sandbox + dbus-proxy.
+          # In sandboxed/Nix environments the bundled bwrap helper fails ("Unexpected
+          # capabilities but not setuid"), aborting the process. Disable WebKit's
+          # internal sandbox so `make run` / `cargo run` launch the viewer.
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS = "1";
+
           XDG_DATA_DIRS = "${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${builtins.getEnv "XDG_DATA_DIRS"}";
 
           RUST_SRC_PATH = rustPlatform.rustLibSrc;
