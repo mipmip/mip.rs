@@ -25,6 +25,10 @@ When making changes you are allowed to update the date/time in `updated_at` in t
 
 Besides updating status and openspec-link, you are NOT ALLOWED to modify the contents of the task file.
 
+## Theme assets
+
+- `asset/theme1/template.html` is GENERATED from `theme_src/` by `make compthemes` (via `scripts/inline-theme.mjs`). Never hand-edit it — edit `theme_src/theme1/{template-src.html,style.css,bridge.js}` and regenerate. `make check` runs `make check-themes`, which fails on drift.
+
 ## Git/jj
 
 - We use jj

@@ -9,5 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: cachix/install-nix-action@v26
+      - name: Check theme artifact is in sync with theme_src/
+        run: nix develop --command make check-themes
       - name: Building package
-        run: nix build 
+        run: nix build
