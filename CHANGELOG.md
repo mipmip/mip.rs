@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.5.2 - 15 jun 2026
+
 ## v0.5.1 - 15 jun 2026
 
 - add default close keybindings: Ctrl+Q, Ctrl+W, and Alt+F4 quit mip (mapped to the `close` command, overridable via `[keybindings]` config)
