@@ -488,6 +488,16 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                         }
                     }
                 }
+                "zoom" => {
+                    if let Ok(level) = value.parse::<f64>() {
+                        ctx.webview.set_zoom_level(level.clamp(0.3, 5.0));
+                    } else {
+                        eprintln!(
+                            "warning: invalid value '{}' for zoom (expected a number, e.g. 1.4)",
+                            value
+                        );
+                    }
+                }
                 _ => {}
             }
         }
@@ -765,6 +775,7 @@ pub fn window(
     math: bool,
     mermaid: bool,
     style: Option<&str>,
+    zoom: f64,
 ) {
     let theme_mode = theme_mode.to_string();
     let infile = infile.to_string();
@@ -795,6 +806,7 @@ pub fn window(
         let webview = WebView::new();
         webview.set_vexpand(true);
         webview.set_hexpand(true);
+        webview.set_zoom_level(zoom);
 
         // Open external links in default browser
         let local_origin = format!("http://localhost:{}", port);

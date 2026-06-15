@@ -50,6 +50,10 @@ struct Cli {
     /// disable mermaid diagram rendering
     #[argh(switch)]
     no_mermaid: bool,
+
+    /// startup zoom level (e.g. 1.4); overrides config, clamped to 0.3-5.0
+    #[argh(option)]
+    zoom: Option<f64>,
 }
 
 fn get_available_port() -> Option<u16> {
@@ -268,6 +272,9 @@ fn main() {
     // CLI --no-mermaid overrides config (flag presence means false)
     let mermaid = if cli.no_mermaid { false } else { cfg.mermaid() };
 
+    // CLI --zoom overrides config; clamp to the same bounds as zoom_in/zoom_out
+    let zoom = cli.zoom.unwrap_or_else(|| cfg.zoom()).clamp(0.3, 5.0);
+
     let path_file = path_file0;
 
     let path_parsed = Path::new(&path_file);
@@ -375,6 +382,7 @@ fn main() {
             math,
             mermaid,
             style_name.as_deref(),
+            zoom,
         );
     } else {
         panic!("E2");

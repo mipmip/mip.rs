@@ -5,6 +5,7 @@
 - fix theme build: replace the abandoned `inliner` dependency (hangs on Node 24) with a dependency-free `scripts/inline-theme.mjs` generator; `make compthemes` now runs reliably and offline
 - back-port theme styling (CSS variables, dark mode, `@media print`, frontmatter table, section numbers, `#{THEME_CLASS}`/`#{CUSTOM_CSS}`) from the generated `asset/theme1/template.html` into `theme_src/`, the single source of truth
 - add `make check-themes` (wired into `make check` and CI) that fails when the committed theme artifact is out of sync with `theme_src/`, preventing silent regeneration drift
+- add configurable default zoom: `zoom` config setting and `--zoom <factor>` CLI flag set the startup zoom level (default 1.0, clamped 0.3–5.0); `:set zoom <factor>` changes it live
 
 ## v0.4.3 - 2 jun 2026
 

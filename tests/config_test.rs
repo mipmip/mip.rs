@@ -228,3 +228,31 @@ fn test_load_from_mermaid_missing_defaults_to_true() {
     let cfg = Config::load_from(file.path());
     assert!(cfg.mermaid());
 }
+
+#[test]
+fn test_zoom_missing_defaults_to_one() {
+    let file = write_temp_config("theme = \"dark\"\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.zoom(), 1.0);
+}
+
+#[test]
+fn test_zoom_in_range_passthrough() {
+    let file = write_temp_config("zoom = 1.4\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.zoom(), 1.4);
+}
+
+#[test]
+fn test_zoom_above_max_clamps() {
+    let file = write_temp_config("zoom = 9.0\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.zoom(), 5.0);
+}
+
+#[test]
+fn test_zoom_below_min_clamps() {
+    let file = write_temp_config("zoom = 0.1\n");
+    let cfg = Config::load_from(file.path());
+    assert_eq!(cfg.zoom(), 0.3);
+}

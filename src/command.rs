@@ -38,6 +38,7 @@ const SETTINGS: &[&str] = &[
     "paragraph_numbers_start",
     "style",
     "theme",
+    "zoom",
 ];
 
 /// Match a prefix against the known settings list. Returns sorted matches.
@@ -1203,7 +1204,13 @@ mod tests {
     #[test]
     fn test_match_settings_empty_prefix() {
         let matches = match_settings("");
-        assert_eq!(matches.len(), 5);
+        assert_eq!(matches.len(), 6);
+    }
+
+    #[test]
+    fn test_match_settings_zoom() {
+        let matches = match_settings("zo");
+        assert_eq!(matches, vec!["zoom"]);
     }
 
     #[test]

@@ -17,6 +17,7 @@ pub struct Config {
     pub math: Option<bool>,
     pub style: Option<String>,
     pub mermaid: Option<bool>,
+    pub zoom: Option<f64>,
 }
 
 impl Config {
@@ -116,6 +117,10 @@ impl Config {
 
     pub fn mermaid(&self) -> bool {
         self.mermaid.unwrap_or(true)
+    }
+
+    pub fn zoom(&self) -> f64 {
+        self.zoom.unwrap_or(1.0).clamp(0.3, 5.0)
     }
 }
 
@@ -226,6 +231,10 @@ math = true
 
 # Enable Mermaid diagram rendering (```mermaid code blocks)
 mermaid = true
+
+# Default zoom level applied at startup (1.0 = 100%, clamped to 0.3–5.0)
+# Override per-run with --zoom <factor>, or change live with :set zoom <factor>
+zoom = 1.0
 
 
 # Maximum number of command bar history entries to keep
