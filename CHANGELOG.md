@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- add default close keybindings: Ctrl+Q, Ctrl+W, and Alt+F4 quit mip (mapped to the `close` command, overridable via `[keybindings]` config)
+- remove the "Document URL" link from the top of rendered pages
+
 ## v0.5.0 - 15 jun 2026
 
 - fix theme build: replace the abandoned `inliner` dependency (hangs on Node 24) with a dependency-free `scripts/inline-theme.mjs` generator; `make compthemes` now runs reliably and offline

@@ -40,7 +40,7 @@ pub(crate) fn strip_seed_scripts(html: &str) -> String {
 }
 
 /// Post-process captured DOM HTML for standalone export.
-/// Strips all script tags, localhost link tags, and the header div.
+/// Strips all script tags and localhost link tags.
 /// Ensures DOCTYPE is present at the top.
 fn post_process_export(html: &str) -> String {
     let mut result = String::with_capacity(html.len() + 20);
@@ -77,13 +77,6 @@ fn post_process_export(html: &str) -> String {
                         continue;
                     }
                 }
-            }
-            // Strip <div id="header">...</div>
-            if html[i..].starts_with("<div id=\"header\"")
-                && let Some(end) = html[i..].find("</div>")
-            {
-                i += end + 6; // skip past </div>
-                continue;
             }
         }
         result.push(html.as_bytes()[i] as char);
@@ -1624,14 +1617,6 @@ mod tests {
         let result = post_process_export(html);
         assert!(!result.contains("localhost"));
         assert!(result.contains("<style>body{}</style>"));
-    }
-
-    #[test]
-    fn test_post_process_strips_header_div() {
-        let html = r#"<!DOCTYPE html><html><body><div id="header"><a href="http://localhost:8000/">file.md</a></div><div id="content">Hello</div></body></html>"#;
-        let result = post_process_export(html);
-        assert!(!result.contains(r#"id="header""#));
-        assert!(result.contains(r#"id="content"#));
     }
 
     #[test]

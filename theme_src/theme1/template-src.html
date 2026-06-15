@@ -11,15 +11,10 @@
     <style id="custom-css">#{CUSTOM_CSS}</style>
   </head>
   <body>
-    <div id="header"></div>
     <div id="main">
       <div class="section">#{BODY}</div>
     </div>
     <script src="bridge.js"></script>
-    <script>
-      document.getElementById('header').innerHTML='<a href="'+seedUrl.substring(0, seedUrl.indexOf('.seed'))+'.html">Document URL</a>';
-    </script>
-
   </body>
 </html>
 
