@@ -478,6 +478,10 @@ impl KeybindingRegistry {
         registry.register_str("ctrl+=", "zoom_in");
         registry.register_str("ctrl+-", "zoom_out");
         registry.register_str("ctrl+0", "zoom_reset");
+        // Close the application
+        registry.register_str("ctrl+q", "close");
+        registry.register_str("ctrl+w", "close");
+        registry.register_str("alt+f4", "close");
         // Vim-style scroll navigation
         registry.register_str("j", "scroll_down");
         registry.register_str("k", "scroll_up");
@@ -1016,6 +1020,26 @@ mod tests {
         assert_eq!(
             reg.lookup(0x067, false, true, false, false),
             LookupResult::Command("scroll_bottom")
+        );
+    }
+
+    #[test]
+    fn test_registry_default_close_keybindings() {
+        let reg = KeybindingRegistry::with_defaults();
+        // Ctrl+Q -> close
+        assert_eq!(
+            reg.lookup(0x071, true, false, false, false),
+            LookupResult::Command("close")
+        );
+        // Ctrl+W -> close
+        assert_eq!(
+            reg.lookup(0x077, true, false, false, false),
+            LookupResult::Command("close")
+        );
+        // Alt+F4 -> close (GDK_KEY_F4 = 0xffc1)
+        assert_eq!(
+            reg.lookup(0xffc1, false, false, true, false),
+            LookupResult::Command("close")
         );
     }
 

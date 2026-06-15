@@ -246,7 +246,7 @@ history_size = 50
 # Commands can be composed with semicolons: "cmd1; cmd2"
 #
 # Available commands:
-#   q / close              - quit mip
+#   q / close              - quit mip (Ctrl+Q, Ctrl+W, Alt+F4)
 #   open <path> / o <path> - open a markdown file
 #   print                  - open print dialog (Ctrl+P)
 #   quicktoc               - toggle fullscreen TOC overlay
@@ -277,6 +277,9 @@ tab = "quicktoc"
 "ctrl+=" = "zoom_in"
 "ctrl+-" = "zoom_out"
 "ctrl+0" = "zoom_reset"
+"ctrl+q" = "close"
+"ctrl+w" = "close"
+"alt+f4" = "close"
 j = "scroll_down"
 k = "scroll_up"
 down = "scroll_down"
