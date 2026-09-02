@@ -80,6 +80,23 @@ placeholder-free HTML document, since it is what the WebView is handed directly.
 - **WHEN** `render_page()` is called with math and mermaid enabled, then disabled
 - **THEN** the KaTeX and mermaid script tags SHALL be present only when enabled
 
+### Requirement: Server asset routes are tested
+The system SHALL have integration tests that verify the warp server serves the
+routes it still provides: bundled assets and document-relative files.
+
+#### Scenario: Serving static assets from source dir
+- **WHEN** a GET request is made for a file that exists in the source directory
+- **THEN** the response SHALL serve that file with a 200 status
+
+#### Scenario: Serving bundled assets
+- **WHEN** a GET request is made for a bundled KaTeX or mermaid asset
+- **THEN** the response SHALL serve that asset with a 200 status and the correct
+  content type
+
+#### Scenario: Unknown path
+- **WHEN** a GET request is made for a path that does not exist
+- **THEN** the response SHALL have a 404 status
+
 ## MODIFIED Requirements
 
 ### Requirement: Full HTML template assembly is tested
@@ -96,20 +113,15 @@ template → complete HTML document.
 - **THEN** the returned HTML SHALL include the `dark` class in the appropriate
   element
 
-### Requirement: Server routes are tested
-The system SHALL have integration tests that verify the warp server routes serve
-correct content.
-
-#### Scenario: Serving static assets from source dir
-- **WHEN** a GET request is made for a file that exists in the source directory
-- **THEN** the response SHALL serve that file with a 200 status
-
-#### Scenario: Serving bundled assets
-- **WHEN** a GET request is made for a bundled KaTeX or mermaid asset
-- **THEN** the response SHALL serve that asset with a 200 status and the correct
-  content type
-
 ## REMOVED Requirements
+
+### Requirement: Server routes are tested
+**Reason**: Two of its scenarios covered the `/.temp.html` and `/.temp.seed`
+routes. Those routes are gone with the files they served, so the scenarios have
+no subject.
+
+**Migration**: Replaced by "Server asset routes are tested" above, which keeps
+the static-asset and bundled-asset scenarios and adds the 404 case.
 
 ### Requirement: View helper functions are tested
 **Reason**: The only view helper under test was `strip_seed_scripts()`, which

@@ -1,4 +1,9 @@
-## ADDED Requirements
+## Purpose
+Let users override mip's default appearance with their own CSS, loaded from
+`~/.config/miprs/styles/<name>/style.css`, switchable at runtime and reloaded
+when the file changes.
+
+## Requirements
 
 ### Requirement: Custom CSS loading
 The system SHALL load a custom CSS file from `~/.config/miprs/styles/<name>/style.css` when the `style` setting is configured.
@@ -27,11 +32,23 @@ Custom CSS SHALL be injected after default styles so it can override via CSS spe
 - **THEN** dark mode SHALL use the custom dark background
 
 ### Requirement: Live-reload custom CSS
-The system SHALL detect changes to the custom CSS file and re-inject without restart.
+The system SHALL detect changes to the custom CSS file with the filesystem watcher
+and reinject without restart. Detection SHALL NOT be performed by polling the
+file's metadata on a timer.
 
 #### Scenario: CSS file modified
 - **WHEN** the user edits and saves the custom CSS file while mip is running
-- **THEN** the preview SHALL update within ~500ms to reflect the new CSS
+- **THEN** the preview SHALL update to reflect the new CSS within ~100ms of the
+  save
+
+#### Scenario: Style changed at runtime
+- **WHEN** the user changes the active style with `:set style`
+- **THEN** the system SHALL stop watching the previous CSS file and begin watching
+  the newly active one
+
+#### Scenario: No style configured
+- **WHEN** no `style` setting is configured
+- **THEN** the system SHALL watch no CSS file and perform no style-related work
 
 ### Requirement: Scaffold new style
 The system SHALL support `--initstyle <name>` to create a new style directory with the default CSS.

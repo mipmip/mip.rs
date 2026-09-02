@@ -1,9 +1,9 @@
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Application window displays rendered markdown
+### Requirement: Application window renders markdown from memory
 The system SHALL create a GTK4 application window with a webkit6 WebView that
-loads rendered HTML built in memory. The local warp server SHALL remain in use for
-bundled assets (`katex/`, `mermaid/`) and for document-relative media resolved
+displays rendered HTML built in memory. The local warp server SHALL remain in use
+for bundled assets (`katex/`, `mermaid/`) and for document-relative media resolved
 through the `docroot` symlink, which is why the HTML is loaded with a
 `http://localhost:{port}/` base URI.
 
@@ -23,8 +23,6 @@ through the `docroot` symlink, which is why the HTML is loaded with a
   document-relative image or video
 - **THEN** those requests SHALL be served by the warp server via the base URI
 
-## ADDED Requirements
-
 ### Requirement: Each invocation is its own application instance
 The system SHALL run one independent application instance per invocation. A new
 invocation SHALL NOT be forwarded to an already-running instance.
@@ -38,3 +36,15 @@ invocation SHALL NOT be forwarded to an already-running instance.
 - **WHEN** an application instance starts
 - **THEN** its `activate` handler SHALL run exactly once, and a repeat
   activation SHALL NOT terminate the process
+
+## REMOVED Requirements
+
+### Requirement: Application window displays rendered markdown
+**Reason**: Its "WebView loads from local server" scenario required the WebView
+to load `http://localhost:{port}/.temp.html`. That file is no longer written —
+the page is built in memory and handed to `load_html()` directly — so the
+scenario's premise no longer exists.
+
+**Migration**: Replaced by "Application window renders markdown from memory"
+above, which keeps the startup and asset-resolution scenarios unchanged and
+restates how the WebView receives its content.
