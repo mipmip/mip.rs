@@ -1,10 +1,10 @@
 ---
 # mip.rs-0nha
 title: mip is using a lot of CPU
-status: draft
+status: in-progress
 type: task
 priority: high
 created_at: 2026-09-01T22:18:49Z
-updated_at: 2026-09-01T22:19:01Z
+updated_at: 2026-09-02T14:52:00Z
 ---
 

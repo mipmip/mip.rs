@@ -1,6 +1,7 @@
 use std::net::TcpStream;
 use std::path::PathBuf;
 
+use futures_util::StreamExt;
 use gtk4::glib;
 use gtk4::glib::translate::IntoGlib;
 use gtk4::prelude::TreeViewExt;
@@ -10,34 +11,6 @@ use webkit6::prelude::*;
 use webkit6::{NavigationPolicyDecision, PolicyDecisionType, PrintOperation, WebView};
 
 use crate::markdown::TocEntry;
-
-/// Remove the seed-polling JS from the generated HTML.
-/// Script 0: sets seedUrl/initialSeed vars
-/// Script 1: keydown handler + XHR polling + location.reload()
-/// Script 2: header link using seedUrl
-/// We strip scripts 0 and 1 since reload is handled from Rust.
-pub(crate) fn strip_seed_scripts(html: &str) -> String {
-    let mut result = html.to_string();
-    // Remove the seedUrl variable script
-    if let Some(start) = result.find("<script>var seedUrl=")
-        && let Some(end) = result[start..].find("</script>")
-    {
-        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-    }
-    // Remove the polling/reload script
-    if let Some(start) = result.find("<script>document.addEventListener(\"keydown\"")
-        && let Some(end) = result[start..].find("</script>")
-    {
-        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-    }
-    // Remove the header link script that references seedUrl
-    if let Some(start) = result.find("<script>document.getElementById(\"header\")")
-        && let Some(end) = result[start..].find("</script>")
-    {
-        result = format!("{}{}", &result[..start], &result[start + end + 9..]);
-    }
-    result
-}
 
 /// Post-process captured DOM HTML for standalone export.
 /// Strips all script tags and localhost link tags.
@@ -162,6 +135,41 @@ fn scroll_to_anchor(webview: &WebView, anchor_id: &str) {
     webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
 }
 
+/// Escape a string for interpolation into a JS template literal.
+fn escape_template_literal(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace("${", "\\${")
+}
+
+/// Set the document's theme class, keeping mermaid's own theme in step.
+fn apply_theme_class(webview: &WebView, class: &str) {
+    let js = format!(
+        "document.documentElement.className = '{class}';if(typeof mermaid!=='undefined'){{mermaid.initialize({{startOnLoad:false,theme:'{class}'==='dark'?'dark':'default'}});if(typeof renderMermaid==='function')renderMermaid();}}"
+    );
+    webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+}
+
+/// Replace the contents of the document's custom-CSS `<style>` element.
+fn inject_custom_css(webview: &WebView, css: &str) {
+    let js = format!(
+        "document.getElementById('custom-css').textContent = `{}`;",
+        escape_template_literal(css)
+    );
+    webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+}
+
+/// Resolve a theme *mode* ("system" | "light" | "dark") to the CSS class the
+/// document is rendered with.
+pub fn resolve_theme_class(mode: &str) -> &'static str {
+    match mode {
+        "light" => "light",
+        "dark" => "dark",
+        _ if crate::is_system_dark() => "dark",
+        _ => "light",
+    }
+}
+
 const SIDETOC_WIDTH_STEP: i32 = 50;
 
 pub struct RuntimeSettings {
@@ -169,7 +177,6 @@ pub struct RuntimeSettings {
     pub paragraph_numbers: std::cell::Cell<bool>,
     pub paragraph_numbers_start: std::cell::Cell<u8>,
     pub theme: std::cell::RefCell<String>,
-    pub force_render: std::cell::Cell<bool>,
     pub infile: std::cell::RefCell<String>,
     pub filename: std::cell::RefCell<String>,
     pub math: std::cell::Cell<bool>,
@@ -188,9 +195,12 @@ struct CommandContext {
     sidetoc_width: i32,
     sidetoc_open: std::cell::Cell<bool>,
     settings: RuntimeSettings,
-    watcher_tx: std::sync::mpsc::Sender<PathBuf>,
+    watcher_tx: std::sync::mpsc::Sender<crate::watch::WatchControl>,
+    render_tx: futures_channel::mpsc::UnboundedSender<crate::watch::WatchMessage>,
     temp_dir: PathBuf,
-    port: u16,
+    /// Held so the `changed::color-scheme` subscription stays connected;
+    /// `None` when the desktop has no colour-scheme schema.
+    _theme_settings: Option<gtk4::gio::Settings>,
 }
 
 fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
@@ -227,50 +237,21 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                     let _ = std::os::unix::fs::symlink(&parent, &docroot);
                 }
 
-                // Send new path to watcher thread
-                let _ = ctx.watcher_tx.send(PathBuf::from(&new_infile));
-
-                // Re-render immediately
-                let sf = ctx.settings.frontmatter.get();
-                let theme_str = ctx.settings.theme.borrow().clone();
-                let theme_class = match theme_str.as_str() {
-                    "light" => "light",
-                    "dark" => "dark",
-                    _ => {
-                        if crate::is_system_dark() {
-                            "dark"
-                        } else {
-                            "light"
-                        }
-                    }
-                };
-                // Load custom CSS for the current style
-                let style_css = {
-                    let style_name = ctx.settings.style.borrow();
-                    if style_name.is_empty() {
-                        String::new()
-                    } else {
-                        std::fs::read_to_string(crate::config::style_css_path(&style_name))
-                            .unwrap_or_default()
-                    }
-                };
-                crate::markdown::to_html(
-                    &new_infile,
-                    &ctx.temp_dir,
-                    ctx.port,
-                    sf,
-                    theme_class,
-                    ctx.settings.math.get(),
-                    ctx.settings.mermaid.get(),
-                    &style_css,
-                );
+                // Retarget the watcher at the newly opened document
+                let _ = ctx
+                    .watcher_tx
+                    .send(crate::watch::WatchControl::Document(PathBuf::from(
+                        &new_infile,
+                    )));
 
                 // Update window title
                 let window_title = format!("{} - MiP", new_filename);
                 ctx.window.set_title(Some(&window_title));
 
                 // Force re-render in poll loop
-                ctx.settings.force_render.set(true);
+                let _ = ctx
+                    .render_tx
+                    .unbounded_send(crate::watch::WatchMessage::Document);
             }
         }
         "sidetoc_open" => {
@@ -381,7 +362,9 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                             return;
                         }
                     }
-                    ctx.settings.force_render.set(true);
+                    let _ = ctx
+                        .render_tx
+                        .unbounded_send(crate::watch::WatchMessage::Document);
                 }
                 "paragraph_numbers" => {
                     match value {
@@ -395,12 +378,16 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                             return;
                         }
                     }
-                    ctx.settings.force_render.set(true);
+                    let _ = ctx
+                        .render_tx
+                        .unbounded_send(crate::watch::WatchMessage::Document);
                 }
                 "paragraph_numbers_start" => {
                     if let Ok(n) = value.parse::<u8>() {
                         ctx.settings.paragraph_numbers_start.set(n.clamp(1, 6));
-                        ctx.settings.force_render.set(true);
+                        let _ = ctx
+                            .render_tx
+                            .unbounded_send(crate::watch::WatchMessage::Document);
                     } else {
                         eprintln!(
                             "warning: invalid value '{}' for paragraph_numbers_start (expected 1-6)",
@@ -412,26 +399,10 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                     if ["system", "light", "dark"].contains(&value) {
                         *ctx.settings.theme.borrow_mut() = value.to_string();
                         // Inject CSS class change immediately
-                        let class = match value {
-                            "light" => "light",
-                            "dark" => "dark",
-                            _ => {
-                                if crate::is_system_dark() {
-                                    "dark"
-                                } else {
-                                    "light"
-                                }
-                            }
-                        };
-                        let js = format!("document.documentElement.className = '{}';", class);
-                        ctx.webview.evaluate_javascript(
-                            &js,
-                            None,
-                            None,
-                            None::<&gtk4::gio::Cancellable>,
-                            |_| {},
-                        );
-                        ctx.settings.force_render.set(true);
+                        apply_theme_class(&ctx.webview, resolve_theme_class(value));
+                        let _ = ctx
+                            .render_tx
+                            .unbounded_send(crate::watch::WatchMessage::Document);
                     } else {
                         eprintln!(
                             "warning: invalid value '{}' for theme (expected system/light/dark)",
@@ -442,35 +413,12 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                 "style" => {
                     *ctx.settings.style.borrow_mut() = value.to_string();
                     if value.is_empty() {
-                        // Clear custom CSS
-                        let js = "document.getElementById('custom-css').textContent = '';";
-                        ctx.webview.evaluate_javascript(
-                            js,
-                            None,
-                            None,
-                            None::<&gtk4::gio::Cancellable>,
-                            |_| {},
-                        );
+                        inject_custom_css(&ctx.webview, "");
+                        let _ = ctx.watcher_tx.send(crate::watch::WatchControl::Style(None));
                     } else {
                         let css_path = crate::config::style_css_path(value);
                         match std::fs::read_to_string(&css_path) {
-                            Ok(css) => {
-                                let escaped = css
-                                    .replace('\\', "\\\\")
-                                    .replace('`', "\\`")
-                                    .replace("${", "\\${");
-                                let js = format!(
-                                    "document.getElementById('custom-css').textContent = `{}`;",
-                                    escaped
-                                );
-                                ctx.webview.evaluate_javascript(
-                                    &js,
-                                    None,
-                                    None,
-                                    None::<&gtk4::gio::Cancellable>,
-                                    |_| {},
-                                );
-                            }
+                            Ok(css) => inject_custom_css(&ctx.webview, &css),
                             Err(_) => {
                                 eprintln!(
                                     "warning: style '{}' not found at {}",
@@ -479,6 +427,10 @@ fn execute_command(cmd: &str, arg: &str, ctx: &CommandContext) {
                                 );
                             }
                         }
+                        // Watch the newly active stylesheet instead of the old one
+                        let _ = ctx.watcher_tx.send(crate::watch::WatchControl::Style(Some(
+                            crate::watch::canonical(&css_path),
+                        )));
                     }
                 }
                 "zoom" => {
@@ -755,6 +707,9 @@ pub fn window(
     port: u16,
     temp_dir: PathBuf,
     show_frontmatter: bool,
+    render_rx: futures_channel::mpsc::UnboundedReceiver<crate::watch::WatchMessage>,
+    render_tx: futures_channel::mpsc::UnboundedSender<crate::watch::WatchMessage>,
+    custom_css: &str,
     theme_mode: &str,
     infile: &str,
     runcmd: Option<&str>,
@@ -764,14 +719,18 @@ pub fn window(
     paragraph_numbers: bool,
     paragraph_numbers_start: u8,
     history_size: usize,
-    watcher_tx: std::sync::mpsc::Sender<PathBuf>,
+    watcher_tx: std::sync::mpsc::Sender<crate::watch::WatchControl>,
     math: bool,
     mermaid: bool,
     style: Option<&str>,
     zoom: f64,
 ) {
     let theme_mode = theme_mode.to_string();
+    let custom_css = custom_css.to_string();
     let infile = infile.to_string();
+    // `connect_activate` takes an `Fn`, so the non-clonable receiver is parked
+    // where the closure can take it on the first (and only) activation.
+    let render_rx = std::rc::Rc::new(std::cell::RefCell::new(Some(render_rx)));
     let runcmd = runcmd.map(|s| s.to_string());
     let style = style.unwrap_or("").to_string();
     let keybinding_registry = std::rc::Rc::new(keybinding_registry);
@@ -785,10 +744,9 @@ pub fn window(
     gtk4::Window::set_default_icon_name("mip");
     let app = Application::builder()
         .application_id("org.mipmip.mip")
+        .flags(gtk4::gio::ApplicationFlags::NON_UNIQUE)
         .build();
 
-    let html_path = temp_dir.join(".temp.html");
-    let seed_path = temp_dir.join(".temp.seed");
     let history_for_shutdown = history.clone();
     let history_path_for_shutdown = history_path.clone();
     let temp_dir_cleanup = temp_dir.clone();
@@ -821,12 +779,20 @@ pub fn window(
             false
         });
 
-        // Load HTML directly, stripping the JS seed-polling scripts
-        // since we handle reload from the Rust side.
-        let initial_html = std::fs::read_to_string(&html_path).unwrap_or_default();
-        let clean_html = strip_seed_scripts(&initial_html);
+        // Render the first page straight into the WebView. The base URI points
+        // at the local server so bundled assets and document-relative media
+        // still resolve, but no HTML is written to or read from disk.
+        let initial_markdown = std::fs::read_to_string(&infile).unwrap_or_default();
+        let initial_html = crate::markdown::render_page(
+            &initial_markdown,
+            show_frontmatter,
+            resolve_theme_class(&theme_mode),
+            math,
+            mermaid,
+            &custom_css,
+        );
         let base_uri = format!("http://localhost:{}/", port);
-        webview.load_html(&clean_html, Some(&base_uri));
+        webview.load_html(&initial_html, Some(&base_uri));
 
         // Extract initial TOC
         let infile_path = infile.clone();
@@ -918,7 +884,6 @@ pub fn window(
                 paragraph_numbers: std::cell::Cell::new(paragraph_numbers),
                 paragraph_numbers_start: std::cell::Cell::new(paragraph_numbers_start),
                 theme: std::cell::RefCell::new(theme_mode.to_string()),
-                force_render: std::cell::Cell::new(false),
                 infile: std::cell::RefCell::new(infile_path.clone()),
                 filename: std::cell::RefCell::new(filename),
                 math: std::cell::Cell::new(math),
@@ -926,8 +891,9 @@ pub fn window(
                 mermaid: std::cell::Cell::new(mermaid),
             },
             watcher_tx: watcher_tx.clone(),
+            render_tx: render_tx.clone(),
             temp_dir: temp_dir.clone(),
-            port,
+            _theme_settings: crate::color_scheme_settings(),
         });
 
         // Command bar (hidden by default)
@@ -1403,117 +1369,79 @@ pub fn window(
             execute_commands(runcmd_text, &cmd_ctx);
         }
 
-        // Poll seed file and update page content via JS injection
-        // to avoid the flicker of a full load_html() call.
-        let seed_path = seed_path.clone();
-        let mut last_seed = std::fs::read_to_string(&seed_path).unwrap_or_default();
-        let mut last_system_dark: Option<bool> = Some(crate::is_system_dark());
+        // Follow the desktop colour scheme by signal rather than by polling it.
+        if let Some(ref theme_settings) = cmd_ctx._theme_settings {
+            let webview_for_theme = webview.clone();
+            let ctx_for_theme = cmd_ctx.clone();
+            theme_settings.connect_changed(Some(crate::COLOR_SCHEME_KEY), move |_, _| {
+                // Explicit light/dark modes ignore the desktop preference.
+                if ctx_for_theme.settings.theme.borrow().as_str() == "system" {
+                    apply_theme_class(&webview_for_theme, resolve_theme_class("system"));
+                }
+            });
+        }
+
+        // React to change notifications from the watcher and from commands.
+        // Updating the page by JS injection rather than a full load_html()
+        // avoids the reload flicker; there is no timer and no polling.
         let mut last_toc: Vec<TocEntry> = initial_toc;
         let mut last_html_body = String::new();
-        let mut last_css_mtime: Option<std::time::SystemTime> = {
-            let style_name = style.clone();
-            if style_name.is_empty() {
-                None
-            } else {
-                std::fs::metadata(crate::config::style_css_path(&style_name))
-                    .and_then(|m| m.modified())
-                    .ok()
+        let ctx_for_render = cmd_ctx.clone();
+        // NON_UNIQUE means `activate` fires once, but a missing receiver must
+        // never take the process down: fall back to a channel nothing sends on,
+        // so this window simply has no live reload.
+        let mut render_rx = match render_rx.borrow_mut().take() {
+            Some(rx) => rx,
+            None => {
+                eprintln!("warning: live reload is unavailable for this window");
+                futures_channel::mpsc::unbounded().1
             }
         };
-        let ctx_for_poll = cmd_ctx.clone();
 
-        glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-            // Check for custom CSS file changes (live-reload)
-            {
-                let style_name = ctx_for_poll.settings.style.borrow().clone();
-                if !style_name.is_empty() {
-                    let css_path = crate::config::style_css_path(&style_name);
-                    let current_mtime = std::fs::metadata(&css_path)
-                        .and_then(|m| m.modified())
-                        .ok();
-                    if current_mtime != last_css_mtime {
-                        last_css_mtime = current_mtime;
+        glib::spawn_future_local(async move {
+            while let Some(message) = render_rx.next().await {
+                match message {
+                    crate::watch::WatchMessage::Style => {
+                        let style_name = ctx_for_render.settings.style.borrow().clone();
+                        if style_name.is_empty() {
+                            continue;
+                        }
+                        let css_path = crate::config::style_css_path(&style_name);
                         if let Ok(css) = std::fs::read_to_string(&css_path) {
-                            let escaped = css
-                                .replace('\\', "\\\\")
-                                .replace('`', "\\`")
-                                .replace("${", "\\${");
-                            let js = format!(
-                                "document.getElementById('custom-css').textContent = `{}`;",
-                                escaped
-                            );
-                            webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
+                            inject_custom_css(&webview, &css);
                         }
                     }
-                }
-            }
-
-            // Check for system theme changes (only when theme is "system")
-            if let Some(ref mut was_dark) = last_system_dark {
-                let current_theme = ctx_for_poll.settings.theme.borrow().clone();
-                if current_theme == "system" {
-                    let now_dark = crate::is_system_dark();
-                    if now_dark != *was_dark {
-                        *was_dark = now_dark;
-                        let class = if now_dark { "dark" } else { "light" };
-                        let js = format!(
-                            "document.documentElement.className = '{}';if(typeof mermaid!=='undefined'){{mermaid.initialize({{startOnLoad:false,theme:'{}'==='dark'?'dark':'default'}});if(typeof renderMermaid==='function')renderMermaid();}}",
-                            class, class
+                    crate::watch::WatchMessage::Document => {
+                        let current_infile = ctx_for_render.settings.infile.borrow().clone();
+                        let Ok(md_content) = std::fs::read_to_string(&current_infile) else {
+                            continue;
+                        };
+                        let sf = ctx_for_render.settings.frontmatter.get();
+                        let pn = ctx_for_render.settings.paragraph_numbers.get();
+                        let pns = ctx_for_render.settings.paragraph_numbers_start.get();
+                        let (html_body, toc_entries, doc_title) = crate::markdown::md_to_html_body_with_toc(
+                            &md_content, sf, pn, pns, ctx_for_render.settings.math.get(),
                         );
-                        webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
-                    }
-                }
-            }
-
-            // Check for force render (from :set command)
-            let force = ctx_for_poll.settings.force_render.get();
-            if force {
-                ctx_for_poll.settings.force_render.set(false);
-            }
-
-            let seed_changed = if let Ok(current_seed) = std::fs::read_to_string(&seed_path) {
-                if current_seed != last_seed {
-                    last_seed = current_seed;
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-
-            if seed_changed || force {
-                    let current_infile = ctx_for_poll.settings.infile.borrow().clone();
-                    if let Ok(md_content) = std::fs::read_to_string(&current_infile) {
-                        let sf = ctx_for_poll.settings.frontmatter.get();
-                        let pn = ctx_for_poll.settings.paragraph_numbers.get();
-                        let pns = ctx_for_poll.settings.paragraph_numbers_start.get();
-                        let (html_body, toc_entries, doc_title) = crate::markdown::md_to_html_body_with_toc(&md_content, sf, pn, pns, ctx_for_poll.settings.math.get());
 
                         // Update window title
-                        let current_filename = ctx_for_poll.settings.filename.borrow().clone();
-                        let title = if let Some(ref t) = doc_title {
-                            format!("{} - MiP", t)
-                        } else {
-                            format!("{} - MiP", current_filename)
+                        let current_filename = ctx_for_render.settings.filename.borrow().clone();
+                        let title = match doc_title {
+                            Some(ref t) => format!("{} - MiP", t),
+                            None => format!("{} - MiP", current_filename),
                         };
-                        ctx_for_poll.window.set_title(Some(&title));
+                        ctx_for_render.window.set_title(Some(&title));
 
-                        // Only update WebView if content actually changed
+                        // Only touch the WebView if the content actually changed
                         if html_body != last_html_body {
-                            let escaped = html_body
-                                .replace('\\', "\\\\")
-                                .replace('`', "\\`")
-                                .replace("${", "\\${");
                             let js = format!(
                                 "document.querySelector('.section').innerHTML = `{}`;if(typeof renderMath==='function')renderMath();if(typeof renderMermaid==='function')renderMermaid();",
-                                escaped
+                                escape_template_literal(&html_body)
                             );
                             webview.evaluate_javascript(&js, None, None, None::<&gtk4::gio::Cancellable>, |_| {});
                             last_html_body = html_body;
                         }
 
-                        // Only rebuild TOC if headings changed
+                        // Only rebuild the TOC if the headings changed
                         if toc_entries != last_toc {
                             populate_toc(&toc_store, &toc_entries);
                             treeview.expand_all();
@@ -1521,8 +1449,8 @@ pub fn window(
                             last_toc = toc_entries;
                         }
                     }
+                }
             }
-            glib::ControlFlow::Continue
         });
     });
 
@@ -1539,48 +1467,6 @@ pub fn window(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_strip_seed_scripts_removes_all_seed_scripts() {
-        let html = r#"<html>
-<head></head>
-<body>
-<div>content</div>
-<script>var seedUrl="http://localhost:8000/.temp.seed";var initialSeed="abc1234";</script>
-<script>document.addEventListener("keydown",function(e){});</script>
-<script>document.getElementById("header").onclick=function(){};</script>
-<script>console.log("keep me");</script>
-</body>
-</html>"#;
-
-        let result = strip_seed_scripts(html);
-
-        assert!(!result.contains("var seedUrl="));
-        assert!(!result.contains("document.addEventListener(\"keydown\""));
-        assert!(!result.contains("document.getElementById(\"header\")"));
-        assert!(result.contains("console.log(\"keep me\")"));
-        assert!(result.contains("<div>content</div>"));
-    }
-
-    #[test]
-    fn test_strip_seed_scripts_preserves_non_seed_content() {
-        let html = r#"<html><body><h1>Hello</h1><script>alert("safe")</script></body></html>"#;
-        let result = strip_seed_scripts(html);
-        assert_eq!(result, html);
-    }
-
-    #[test]
-    fn test_strip_seed_scripts_handles_empty_input() {
-        let result = strip_seed_scripts("");
-        assert_eq!(result, "");
-    }
-
-    #[test]
-    fn test_strip_seed_scripts_handles_no_scripts() {
-        let html = "<html><body><p>No scripts here</p></body></html>";
-        let result = strip_seed_scripts(html);
-        assert_eq!(result, html);
-    }
 
     // Note: populate_toc() cannot be unit-tested here because GTK
     // TreeStore requires initialization on the main thread, which the

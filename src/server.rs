@@ -32,13 +32,7 @@ impl RestBro {
     /// This is testable with `warp::test`.
     pub fn routes(
         path_dir: String,
-        temp_dir: String,
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone + 'static {
-        let temp_html =
-            warp::path(".temp.html").and(warp::fs::file(format!("{}/.temp.html", temp_dir)));
-        let temp_seed =
-            warp::path(".temp.seed").and(warp::fs::file(format!("{}/.temp.seed", temp_dir)));
-
         let katex = warp::path("katex").and(warp::path::tail()).and_then(
             |tail: warp::path::Tail| async move {
                 let path = tail.as_str();
@@ -75,13 +69,11 @@ impl RestBro {
 
         let assets = warp::fs::dir(path_dir);
 
-        temp_html.or(temp_seed).or(katex).or(mermaid).or(assets)
+        katex.or(mermaid).or(assets)
     }
 
-    pub async fn run_bro(path_dir: String, temp_dir: String, port: u16) {
-        println!("{}", path_dir);
-
-        let routes = Self::routes(path_dir, temp_dir);
+    pub async fn run_bro(path_dir: String, port: u16) {
+        let routes = Self::routes(path_dir);
 
         warp::serve(routes).run(([127, 0, 0, 1], port)).await;
     }

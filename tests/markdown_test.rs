@@ -62,36 +62,20 @@ fn test_md_to_html_body_frontmatter_shown() {
 
 #[test]
 fn test_build_html_replaces_placeholders() {
-    let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}<script>var seedUrl=\"#{SEEDURL}\";var initialSeed=\"#{INITIALSEED}\";</script></body></html>";
+    let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}</body></html>";
     let md = "# Hello";
-    let result = build_html(
-        md,
-        template,
-        "abc1234",
-        "http://localhost:8000/.temp.seed",
-        false,
-        "dark",
-        false,
-        false,
-        "",
-    );
+    let result = build_html(md, template, false, "dark", false, false, "");
 
     assert!(result.contains("<h1 id=\"hello\">Hello</h1>"));
     assert!(!result.contains("#{BODY}"));
-    assert!(!result.contains("#{INITIALSEED}"));
-    assert!(!result.contains("#{SEEDURL}"));
     assert!(!result.contains("#{THEME_CLASS}"));
-    assert!(result.contains("abc1234"));
-    assert!(result.contains("http://localhost:8000/.temp.seed"));
     assert!(result.contains("dark"));
 }
 
 #[test]
 fn test_build_html_applies_theme_class() {
     let template = "<html class=\"#{THEME_CLASS}\"><body>#{BODY}</body></html>";
-    let result = build_html(
-        "hello", template, "s", "u", false, "light", false, false, "",
-    );
+    let result = build_html("hello", template, false, "light", false, false, "");
     assert!(result.contains("class=\"light\""));
 }
 
@@ -99,7 +83,7 @@ fn test_build_html_applies_theme_class() {
 fn test_build_html_with_frontmatter() {
     let template = "<html>#{BODY}</html>";
     let md = "---\ntitle: Test\n---\n\nBody text";
-    let result = build_html(md, template, "s", "u", true, "light", false, false, "");
+    let result = build_html(md, template, true, "light", false, false, "");
     assert!(result.contains("<table class=\"frontmatter\">"));
     assert!(result.contains("title"));
 }
@@ -212,7 +196,7 @@ fn test_math_in_fenced_code_block_not_rendered() {
 #[test]
 fn test_build_html_math_enabled_includes_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", true, false, "");
+    let result = build_html("$x$", template, false, "light", true, false, "");
     assert!(result.contains("katex.min.js"));
     assert!(result.contains("katex.min.css"));
     assert!(result.contains("renderMath"));
@@ -221,7 +205,7 @@ fn test_build_html_math_enabled_includes_katex() {
 #[test]
 fn test_build_html_math_disabled_no_katex() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html("$x$", template, "s", "u", false, "light", false, false, "");
+    let result = build_html("$x$", template, false, "light", false, false, "");
     assert!(!result.contains("katex.min.js"));
     assert!(!result.contains("renderMath"));
 }
@@ -232,8 +216,6 @@ fn test_build_html_replaces_custom_css_placeholder() {
     let result = build_html(
         "hello",
         template,
-        "s",
-        "u",
         false,
         "light",
         false,
@@ -247,9 +229,7 @@ fn test_build_html_replaces_custom_css_placeholder() {
 #[test]
 fn test_build_html_empty_custom_css() {
     let template = "<html><head><style>default</style><style id=\"custom-css\">#{CUSTOM_CSS}</style></head><body>#{BODY}</body></html>";
-    let result = build_html(
-        "hello", template, "s", "u", false, "light", false, false, "",
-    );
+    let result = build_html("hello", template, false, "light", false, false, "");
     assert!(result.contains("<style id=\"custom-css\"></style>"));
     assert!(!result.contains("#{CUSTOM_CSS}"));
 }
@@ -267,9 +247,7 @@ fn test_mermaid_code_block_produces_language_mermaid_class() {
 #[test]
 fn test_build_html_mermaid_enabled_includes_mermaid_scripts() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html(
-        "# Hello", template, "s", "u", false, "light", false, true, "",
-    );
+    let result = build_html("# Hello", template, false, "light", false, true, "");
     assert!(result.contains("mermaid.min.js"));
     assert!(result.contains("renderMermaid"));
     assert!(result.contains("startOnLoad:false"));
@@ -278,9 +256,58 @@ fn test_build_html_mermaid_enabled_includes_mermaid_scripts() {
 #[test]
 fn test_build_html_mermaid_disabled_no_mermaid_scripts() {
     let template = "<html><head></head><body>#{BODY}</body></html>";
-    let result = build_html(
-        "# Hello", template, "s", "u", false, "light", false, false, "",
-    );
+    let result = build_html("# Hello", template, false, "light", false, false, "");
     assert!(!result.contains("mermaid.min.js"));
     assert!(!result.contains("renderMermaid"));
+}
+
+// --- render_page: the complete page handed straight to the WebView ---
+
+#[test]
+fn test_render_page_is_a_complete_document() {
+    let html =
+        mip::markdown::render_page("# Title\n\nBody text.\n", false, "dark", false, false, "");
+
+    assert!(html.starts_with("<!DOCTYPE html>"), "needs a doctype");
+    assert!(html.contains("class=\"dark\""), "theme class applied");
+    assert!(
+        html.contains("<h1 id=\"title\">Title</h1>"),
+        "body rendered"
+    );
+    assert!(html.contains("Body text."));
+    assert!(
+        html.contains("id=\"custom-css\""),
+        "custom css hook present"
+    );
+    assert!(html.contains("</html>"));
+}
+
+#[test]
+fn test_render_page_leaves_no_placeholders() {
+    let html = mip::markdown::render_page("# Hi\n", true, "light", true, true, "body{}");
+    assert!(
+        !html.contains("#{"),
+        "every placeholder must be substituted"
+    );
+}
+
+#[test]
+fn test_render_page_has_no_seed_or_bridge_remnants() {
+    // The page used to carry a seed token plus a polling script that fetched
+    // it, and an inlined bridge.js that was stripped again before loading.
+    let html = mip::markdown::render_page("# Hi\n", false, "light", false, false, "");
+    for remnant in ["seedUrl", "initialSeed", "checkSeed", ".temp.seed", "hljs"] {
+        assert!(!html.contains(remnant), "page still references {remnant}");
+    }
+}
+
+#[test]
+fn test_render_page_includes_math_and_mermaid_only_when_enabled() {
+    let with = mip::markdown::render_page("# Hi\n", false, "light", true, true, "");
+    assert!(with.contains("katex.min.js"));
+    assert!(with.contains("mermaid.min.js"));
+
+    let without = mip::markdown::render_page("# Hi\n", false, "light", false, false, "");
+    assert!(!without.contains("katex.min.js"));
+    assert!(!without.contains("mermaid.min.js"));
 }

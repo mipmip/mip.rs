@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## v0.5.4 - 2 sep 2026
+
+## v0.5.3 - 2 sep 2026
+
+- fix runaway CPU: mip pegged one CPU core permanently on any document, even an unmodified one. The file watcher reacted to every inotify event including `IN_OPEN`, and rendering opens the watched file to read it, so each render triggered the next — roughly 1070 renders per second. The watcher now reacts only to content and existence changes, and idle CPU is 0%
+- fix `mip b.md` not opening `b.md` while another mip window is open: the application was implicitly single-instance over D-Bus, so a second launch re-activated the first window (duplicating its own document) instead of opening the new file
+- debounce file changes by 100ms, so one save produces one render instead of one per inotify event
+- replace the 500ms polling loop with event-driven updates: change notifications now travel over a channel to the GTK main loop instead of through a random token written to `$TMPDIR/mip-<pid>/.temp.seed`
+- follow the desktop colour scheme via a `gio::Settings` signal instead of spawning `gsettings` twice a second, and degrade safely on desktops without the GNOME schema instead of aborting
+- render the initial page in memory: `.temp.html` and `.temp.seed` are no longer written, and their HTTP routes are gone. The temp directory now holds only the `docroot` symlink
+- watch the document's directory non-recursively, so opening a file in a large tree no longer establishes watches on `target/`, `.git/`, and every other subdirectory
+- write custom-CSS live-reload through the file watcher rather than polling the file's mtime
+- remove the dead browser-side seed poll and the 94 KB highlight.js bundle it was inlined with (its initialiser had been commented out, and the whole script block was stripped before the page loaded); the generated theme template shrinks from 104 KB to 6.7 KB
+
 ## v0.5.2 - 15 jun 2026
 
 ## v0.5.1 - 15 jun 2026

@@ -2,10 +2,7 @@ use gray_matter::Matter;
 use gray_matter::engine::YAML;
 use gray_matter::value::pod::Pod;
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd, html};
-use rand::Rng;
-use rand::distr::Alphanumeric;
 use rust_embed::Embed;
-use std::fs;
 
 #[derive(Embed)]
 #[folder = "asset/theme1"]
@@ -378,8 +375,8 @@ pub fn md_to_html_body(markdown_input: &str, show_frontmatter: bool) -> String {
 
 /// Build the complete HTML document from markdown content.
 /// This is a pure function: no I/O, no randomness.
-/// Takes markdown string, template string, seed, seed URL,
-/// show_frontmatter flag, and theme class; returns complete HTML string.
+/// Takes markdown and template strings, the show_frontmatter flag, and a theme
+/// class; returns a complete HTML string.
 const MATH_SCRIPTS: &str = r#"<link rel="stylesheet" href="/katex/katex.min.css">
     <script src="/katex/katex.min.js"></script>
     <script>
@@ -410,8 +407,6 @@ const MERMAID_SCRIPTS: &str = r#"<script src="/mermaid/mermaid.min.js"></script>
 pub fn build_html(
     markdown_input: &str,
     template: &str,
-    seed: &str,
-    seed_url: &str,
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
@@ -421,8 +416,6 @@ pub fn build_html(
     let html_body = md_to_html_body(markdown_input, show_frontmatter);
     let mut result = template
         .replace("#{BODY}", &html_body)
-        .replace("#{INITIALSEED}", seed)
-        .replace("#{SEEDURL}", seed_url)
         .replace("#{THEME_CLASS}", theme_class)
         .replace("#{CUSTOM_CSS}", custom_css);
     if math {
@@ -434,80 +427,33 @@ pub fn build_html(
     result
 }
 
+/// Render a complete HTML page for `markdown_input`, embedded template included.
+///
+/// This is the whole render pipeline: nothing is written to disk. mip used to
+/// render into `$TMPDIR/mip-<pid>/.temp.html` and signal the change through a
+/// random token in `.temp.seed`; the WebView is now handed the string directly
+/// and change notifications travel over a channel.
 #[allow(clippy::too_many_arguments)]
-pub fn to_html(
-    infile: &str,
-    output_dir: &std::path::Path,
-    port: u16,
-    show_frontmatter: bool,
-    theme_class: &str,
-    math: bool,
-    mermaid: bool,
-    custom_css: &str,
-) {
-    let markdown_input = fs::read_to_string(infile);
-    if let Ok(markdown_input) = markdown_input {
-        to_file(
-            &markdown_input,
-            output_dir,
-            port,
-            show_frontmatter,
-            theme_class,
-            math,
-            mermaid,
-            custom_css,
-        )
-    };
-}
-
-#[allow(clippy::too_many_arguments)]
-fn to_file(
+pub fn render_page(
     markdown_input: &str,
-    output_dir: &std::path::Path,
-    port: u16,
     show_frontmatter: bool,
     theme_class: &str,
     math: bool,
     mermaid: bool,
     custom_css: &str,
-) {
-    let seed_url = format!("http://localhost:{}/.temp.seed", port);
-
-    let seed: String = rand::rng()
-        .sample_iter(&Alphanumeric)
-        .take(7)
-        .map(char::from)
-        .collect();
-
-    let index_html = Asset::get("template.html").unwrap();
-    let index_html_str = std::str::from_utf8(index_html.data.as_ref());
-    match index_html_str {
-        Ok(template) => {
-            let html_complete = build_html(
-                markdown_input,
-                template,
-                &seed,
-                &seed_url,
-                show_frontmatter,
-                theme_class,
-                math,
-                mermaid,
-                custom_css,
-            );
-            if let Err(e) = fs::write(output_dir.join(".temp.seed"), seed) {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    eprintln!("warning: could not write seed file: {}", e);
-                }
-                return;
-            }
-            if let Err(e) = fs::write(output_dir.join(".temp.html"), html_complete)
-                && e.kind() != std::io::ErrorKind::NotFound
-            {
-                eprintln!("warning: could not write html file: {}", e);
-            }
-        }
-        Err(_) => println!("URF this..no file"),
-    };
+) -> String {
+    let template = Asset::get("template.html").expect("template.html is embedded at build time");
+    let template =
+        std::str::from_utf8(template.data.as_ref()).expect("template.html is valid UTF-8");
+    build_html(
+        markdown_input,
+        template,
+        show_frontmatter,
+        theme_class,
+        math,
+        mermaid,
+        custom_css,
+    )
 }
 
 #[cfg(test)]

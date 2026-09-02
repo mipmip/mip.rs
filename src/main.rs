@@ -1,6 +1,5 @@
 use argh::FromArgs;
 use mip::server::RestBro;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::env;
 use std::fs;
 use std::net::TcpListener;
@@ -62,69 +61,6 @@ fn get_available_port() -> Option<u16> {
 
 pub(crate) fn port_is_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn watch(
-    path_dir: PathBuf,
-    path_file: String,
-    temp_dir: PathBuf,
-    port: u16,
-    show_frontmatter: bool,
-    theme_class: String,
-    new_file_rx: std::sync::mpsc::Receiver<PathBuf>,
-    math: bool,
-    custom_css: String,
-    mermaid: bool,
-) -> notify::Result<()> {
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    let mut watcher = RecommendedWatcher::new(tx, notify::Config::default())?;
-    let mut current_dir = path_dir;
-    let mut current_file = path_file;
-
-    watcher.watch(&current_dir, RecursiveMode::Recursive)?;
-
-    loop {
-        // Check for new file paths from :open
-        while let Ok(new_path) = new_file_rx.try_recv() {
-            let new_file = new_path.to_string_lossy().to_string();
-            if let Some(new_dir) = new_path.parent() {
-                let new_dir = new_dir.to_path_buf();
-                if new_dir != current_dir {
-                    let _ = watcher.unwatch(&current_dir);
-                    let _ = watcher.watch(&new_dir, RecursiveMode::Recursive);
-                    current_dir = new_dir;
-                }
-            }
-            current_file = new_file;
-        }
-
-        // Check for file events with a timeout
-        match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-            Ok(Ok(event)) => {
-                if !event.paths.is_empty() {
-                    let teststr = format!("{}", event.paths[0].display());
-                    if teststr.contains(&current_file) {
-                        mip::markdown::to_html(
-                            &current_file,
-                            &temp_dir,
-                            port,
-                            show_frontmatter,
-                            &theme_class,
-                            math,
-                            mermaid,
-                            &custom_css,
-                        );
-                    }
-                }
-            }
-            Ok(Err(e)) => println!("watch error: {:?}", e),
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-    }
-    Ok(())
 }
 
 fn main() {
@@ -224,19 +160,6 @@ fn main() {
         cfg.theme()
     };
 
-    let theme_class = match theme {
-        "light" => "light",
-        "dark" => "dark",
-        _ => {
-            // Detect system dark mode preference
-            if mip::is_system_dark() {
-                "dark"
-            } else {
-                "light"
-            }
-        }
-    };
-
     // CLI --frontmatter overrides config (flag presence means true)
     let show_frontmatter = if cli.frontmatter {
         true
@@ -298,13 +221,11 @@ fn main() {
         eprintln!("warning: could not create docroot symlink: {}", e);
     }
 
-    let temp_dir_for_watcher = temp_dir.clone();
-    let temp_dir_str = temp_dir.to_str().unwrap().to_string();
-    let theme_class_string = theme_class.to_string();
     let path_file_for_view = path_file.clone();
-    let path_file_for_watcher = path_file.clone();
-    let path_dir_for_watcher = path_dir_for_server.clone();
-    let theme_class_for_watcher = theme_class_string.clone();
+    let path_file_for_watcher = mip::watch::canonical(Path::new(&path_file));
+    let style_path_for_watcher = style_name
+        .as_deref()
+        .map(|name| mip::watch::canonical(&mip::config::style_css_path(name)));
     let runcmd_string = runcmd.map(|s| s.to_string());
     let sidetoc_width = cfg.sidetoc_width();
     let sidetoc_position = cfg.sidetoc_position().to_string();
@@ -318,50 +239,40 @@ fn main() {
     }
 
     if let Some(available_port) = get_available_port() {
-        mip::markdown::to_html(
-            &path_file,
-            &temp_dir,
-            available_port,
-            show_frontmatter,
-            &theme_class_string,
-            math,
-            mermaid,
-            &custom_css,
-        );
+        // Channel for the GTK main loop to retarget the watcher (`:open`,
+        // `:set style`).
+        let (control_tx, control_rx) = std::sync::mpsc::channel::<mip::watch::WatchControl>();
 
-        // Channel for :open to send new file paths to the watcher
-        let (new_file_tx, new_file_rx) = std::sync::mpsc::channel::<PathBuf>();
+        // Channel for the watcher (and the command handlers) to tell the GTK
+        // main loop that something changed. This replaces the seed file that
+        // used to carry that signal through the filesystem.
+        let (render_tx, render_rx) = futures_channel::mpsc::unbounded::<mip::watch::WatchMessage>();
+        let render_tx_for_commands = render_tx.clone();
 
         // Serve from the docroot symlink so :open can update the target
         let server_dir = docroot.to_str().unwrap().to_string();
+
+        // The watch loop is synchronous and never yields, so it gets a plain
+        // thread of its own rather than permanently occupying a tokio worker.
+        std::thread::spawn(move || {
+            if let Err(e) = mip::watch::run(
+                path_file_for_watcher,
+                style_path_for_watcher,
+                control_rx,
+                |message| {
+                    let _ = render_tx.unbounded_send(message);
+                },
+            ) {
+                eprintln!("error: {:?}", e)
+            }
+        });
 
         // Run tokio runtime in a separate thread so it doesn't compete
         // with the GTK4 main loop for the main thread.
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
-                let watcher_handle = tokio::spawn(async move {
-                    if let Err(e) = watch(
-                        path_dir_for_watcher,
-                        path_file_for_watcher,
-                        temp_dir_for_watcher,
-                        available_port,
-                        show_frontmatter,
-                        theme_class_for_watcher,
-                        new_file_rx,
-                        math,
-                        custom_css,
-                        mermaid,
-                    ) {
-                        println!("error: {:?}", e)
-                    }
-                });
-
-                let server_handle = tokio::spawn(async move {
-                    RestBro::run_bro(server_dir, temp_dir_str, available_port).await;
-                });
-
-                let _ = tokio::join!(watcher_handle, server_handle);
+                RestBro::run_bro(server_dir, available_port).await;
             });
         });
 
@@ -369,6 +280,9 @@ fn main() {
             available_port,
             temp_dir,
             show_frontmatter,
+            render_rx,
+            render_tx_for_commands,
+            &custom_css,
             theme,
             &path_file_for_view,
             runcmd_string.as_deref(),
@@ -378,7 +292,7 @@ fn main() {
             paragraph_numbers,
             paragraph_numbers_start,
             cfg.history_size(),
-            new_file_tx,
+            control_tx,
             math,
             mermaid,
             style_name.as_deref(),
