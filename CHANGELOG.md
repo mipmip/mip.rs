@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.5.5 - 3 sep 2026
+
+- fix build: v0.5.4 did not compile. Its release regenerated `Cargo.lock` from scratch, resolving `gtk4` to 0.11.4, which `webkit6` 0.6.1 cannot build against (`cannot find type 'Accessible' in crate 'gtk'`). The gtk-rs family is pinned back to a working set and `gtk4` is now pinned in `Cargo.toml`; there is no newer `webkit6` to move to yet
+- fix release script: it ran `cargo generate-lockfile`, which discards the committed lock and re-resolves every dependency to newest-compatible on every release. It now runs `cargo update --workspace`, which bumps only mip's own entry and leaves dependencies pinned
+- add a `make check` gate to the release script, so a tree that does not build or whose tests fail can no longer be committed, tagged, and pushed
+
 ## v0.5.4 - 2 sep 2026
 
 ## v0.5.3 - 2 sep 2026

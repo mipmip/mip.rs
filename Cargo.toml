@@ -1,10 +1,14 @@
 [package]
 name = "mip"
-version = "0.5.4"
+version = "0.5.5"
 edition = "2024"
 
 [dependencies]
-gtk4 = "0.11"
+# Pinned: webkit6 0.6.1 does not compile against gtk4 0.11.4
+# ("cannot find type `Accessible` in crate `gtk`"), and there is no newer
+# webkit6 to move to. Release builds regenerate Cargo.lock, so the pin has to
+# live here rather than only in the lock. Unpin when webkit6 supports 0.11.4.
+gtk4 = "=0.11.3"
 webkit6 = "0.6"
 tokio = { version = "1", features = ["full"] }
 warp = { version = "0.3" }

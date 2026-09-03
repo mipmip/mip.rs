@@ -58,27 +58,41 @@ fi
 sed -i "0,/^version = \"${CURRENT_VERSION}\"/s//version = \"${NEW_VERSION}\"/" Cargo.toml
 echo "✓ Cargo.toml version → ${NEW_VERSION}"
 
-# 2. Update Cargo.lock
-cargo generate-lockfile 2>/dev/null || true
-echo "✓ Cargo.lock updated"
+# 2. Update Cargo.lock — workspace members only.
+# NOT `cargo generate-lockfile`: that discards the committed lock and re-resolves
+# every dependency to newest-compatible, which is how v0.5.4 shipped with gtk4
+# 0.11.4 and an unbuildable webkit6. `--workspace` bumps only mip's own entry.
+cargo update --workspace
+echo "✓ Cargo.lock updated (workspace members only)"
 
-# 3. Stamp changelog
+# 3. Gate: never tag a tree that does not build and pass its tests.
+echo "Running make check..."
+if ! make check; then
+    echo "error: 'make check' failed — aborting release."
+    echo "Nothing has been committed, tagged, or pushed."
+    echo "Cargo.toml and Cargo.lock have been modified; revert with:"
+    echo "  jj restore Cargo.toml Cargo.lock"
+    exit 1
+fi
+echo "✓ make check passed"
+
+# 4. Stamp changelog
 sed -i "s/^## Unreleased$/## Unreleased\n\n## v${NEW_VERSION} - ${RELEASE_DATE}/" CHANGELOG.md
 echo "✓ CHANGELOG.md stamped: v${NEW_VERSION} - ${RELEASE_DATE}"
 
-# 4. Describe in jj
+# 5. Describe in jj
 jj describe -m "release v${NEW_VERSION}"
 echo "✓ jj describe: release v${NEW_VERSION}"
 
-# 5. Create new working copy so the release commit is immutable
+# 6. Create new working copy so the release commit is immutable
 jj new
 echo "✓ jj new (clean working copy)"
 
-# 6. Point main to the release commit
+# 7. Point main to the release commit
 jj bookmark set main -r @-
 echo "✓ main → release v${NEW_VERSION}"
 
-# 7. Export to git and create tag
+# 8. Export to git and create tag
 jj git export
 RELEASE_COMMIT=$(jj log -r @- --no-graph -T 'commit_id')
 git tag "${TAG}" "${RELEASE_COMMIT}"
